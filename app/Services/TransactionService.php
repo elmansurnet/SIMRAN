@@ -10,18 +10,8 @@ use Illuminate\Support\Str;
 
 class TransactionService
 {
-    /**
-     * WHY @var $creatorId:
-     *   auth()->id() is declared as int|string|null on the Guard interface.
-     *   Intelephense may report "Undefined method 'id'" when it loses the
-     *   Auth facade → Guard type chain. Capturing and annotating the int removes
-     *   the static analysis ambiguity without altering runtime behaviour.
-     */
     public function create(Disbursement $disbursement, array $data, ?UploadedFile $proof = null): Transaction
     {
-        /** @var int $creatorId */
-        $creatorId = auth()->id();
-
         $proofPath = null;
         $proofName = null;
 
@@ -30,12 +20,12 @@ class TransactionService
         }
 
         return $disbursement->transactions()->create([
-            'created_by'          => $creatorId,
-            'type'                => $data['type'],
-            'transaction_date'    => $data['transaction_date'],
-            'description'         => $data['description'],
-            'amount'              => $data['amount'],
-            'proof_path'          => $proofPath,
+            'created_by'       => auth()->id(),
+            'type'             => $data['type'],
+            'transaction_date' => $data['transaction_date'],
+            'description'      => $data['description'],
+            'amount'           => $data['amount'],
+            'proof_path'       => $proofPath,
             'proof_original_name' => $proofName,
         ]);
     }
@@ -46,6 +36,7 @@ class TransactionService
         $proofName = $transaction->proof_original_name;
 
         if ($proof) {
+            // Delete old proof file if it exists
             if ($proofPath && Storage::exists($proofPath)) {
                 Storage::delete($proofPath);
             }
@@ -53,11 +44,11 @@ class TransactionService
         }
 
         $transaction->update([
-            'type'                => $data['type'],
-            'transaction_date'    => $data['transaction_date'],
-            'description'         => $data['description'],
-            'amount'              => $data['amount'],
-            'proof_path'          => $proofPath,
+            'type'             => $data['type'],
+            'transaction_date' => $data['transaction_date'],
+            'description'      => $data['description'],
+            'amount'           => $data['amount'],
+            'proof_path'       => $proofPath,
             'proof_original_name' => $proofName,
         ]);
 
@@ -66,6 +57,7 @@ class TransactionService
 
     public function delete(Transaction $transaction): void
     {
+        // Clean up proof file
         if ($transaction->proof_path && Storage::exists($transaction->proof_path)) {
             Storage::delete($transaction->proof_path);
         }

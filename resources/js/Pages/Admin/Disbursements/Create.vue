@@ -100,9 +100,8 @@
           <FormField label="Jumlah Dana (Rp)" :error="form.errors.amount" required>
             <div class="relative">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm font-medium">Rp</span>
-              <!-- <input v-model="form.amount" type="number" min="1" step="1000" class="form-input pl-10"
-                     placeholder="0" /> -->
-              <input v-model="form.amount" type="text" inputmode="numeric" class="form-input pl-10" placeholder="0"/>
+              <input v-model="form.amount" type="number" min="1" step="1000" class="form-input pl-10"
+                     placeholder="0" />
             </div>
           </FormField>
 

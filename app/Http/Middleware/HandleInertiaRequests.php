@@ -4,7 +4,6 @@ namespace App\Http\Middleware;
 
 use App\Models\BudgetAllocation;
 use App\Models\Setting;
-use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -19,16 +18,6 @@ class HandleInertiaRequests extends Middleware
 
     public function share(Request $request): array
     {
-        /**
-         * WHY @var here:
-         *   $request->user() returns Authenticatable|null per the framework interface.
-         *   Intelephense cannot know that the authenticatable IS App\Models\User, so
-         *   it reports "Undefined method 'role'" for ->role->value and ->role->label().
-         *   The @var annotation provides the concrete type to the static analyser
-         *   without changing runtime behaviour.
-         *
-         * @var User|null $user
-         */
         $user = $request->user();
 
         $lowBudgetAlerts = [];
@@ -37,10 +26,10 @@ class HandleInertiaRequests extends Middleware
                 ->get()
                 ->filter(fn ($a) => $a->utilization_percentage >= 80)
                 ->map(fn ($a) => [
-                    'id'        => $a->id,
-                    'name'      => $a->name,
-                    'pct'       => round((float) $a->utilization_percentage, 1),
-                    'remaining' => (float) $a->remaining_amount,
+                    'id'      => $a->id,
+                    'name'    => $a->name,
+                    'pct'     => round($a->utilization_percentage, 1),
+                    'remaining' => $a->remaining_amount,
                 ])
                 ->values()
                 ->all();
@@ -64,7 +53,7 @@ class HandleInertiaRequests extends Middleware
                 'error'   => $request->session()->get('error'),
             ],
             'low_budget_alerts'      => $lowBudgetAlerts,
-            'extra_transaction_days' => (int) Setting::extraTransactionDays(),
+            'extra_transaction_days' => Setting::extraTransactionDays(),
         ]);
     }
 }

@@ -13,26 +13,14 @@ class ProposalService
 {
     public function __construct(private ReportService $reports) {}
 
-    /**
-     * Applicant submits a new proposal.
-     *
-     * WHY @var annotation on $actorId:
-     *   auth()->id() is declared as returning int|string|null on the Guard interface.
-     *   Inside DB::transaction() closures, Intelephense may report "Undefined method 'id'"
-     *   because it loses the Auth facade → Guard → StatefulGuard type chain.
-     *   Capturing the ID before entering the closure and annotating its type removes
-     *   the ambiguity without suppressing any real error.
-     */
+    /** Applicant submits a new proposal */
     public function create(array $data, ?UploadedFile $pdf = null): Proposal
     {
-        /** @var int $actorId */
-        $actorId = auth()->id();
-
-        return DB::transaction(function () use ($data, $pdf, $actorId) {
+        return DB::transaction(function () use ($data, $pdf) {
             $proposal = Proposal::create([
                 'code'            => Proposal::generateCode(),
                 'status'          => ProposalStatus::Draft,
-                'applicant_id'    => $actorId,
+                'applicant_id'    => auth()->id(),
                 'purpose'         => $data['purpose'],
                 'name'            => $data['name'],
                 'start_date'      => $data['start_date'],
@@ -44,7 +32,9 @@ class ProposalService
 
             if ($pdf) {
                 $path = $pdf->store("proposals/{$proposal->id}", 'local');
-                $proposal->update(['proposal_pdf_path' => $path]);
+                $proposal->update([
+                    'proposal_pdf_path' => $path,
+                ]);
             }
 
             return $proposal;
@@ -56,12 +46,11 @@ class ProposalService
      */
     public function forward(Proposal $proposal, float $approvedAmount, array $approverIds, ?string $note = null): void
     {
-        /** @var int $actorId */
-        $actorId = auth()->id();
-
-        DB::transaction(function () use ($proposal, $approvedAmount, $approverIds, $note, $actorId) {
+        DB::transaction(function () use ($proposal, $approvedAmount, $approverIds, $note) {
+            // Remove any previous approvers
             $proposal->approvers()->delete();
 
+            // Insert new approvers
             foreach ($approverIds as $userId) {
                 ProposalApprover::create([
                     'proposal_id' => $proposal->id,
@@ -72,40 +61,37 @@ class ProposalService
             $proposal->update([
                 'status'          => ProposalStatus::Forwarded,
                 'approved_amount' => $approvedAmount,
-                'reviewed_by'     => $actorId,
+                'reviewed_by'     => auth()->id(),
                 'forwarded_at'    => now(),
                 'superadmin_note' => $note,
             ]);
         });
     }
 
-    /** Superadmin rejects a proposal. */
+    /** Superadmin rejects a proposal */
     public function reject(Proposal $proposal, ?string $note = null): void
     {
-        /** @var int $actorId */
-        $actorId = auth()->id();
-
         $proposal->update([
             'status'          => ProposalStatus::Rejected,
-            'reviewed_by'     => $actorId,
+            'reviewed_by'     => auth()->id(),
             'superadmin_note' => $note,
         ]);
     }
 
     /**
      * Approver records their approval.
-     * If ALL approvers have approved → proposal becomes Approved + certificate generated.
+     * If ALL approvers have approved → proposal becomes Approved + cert generated.
      */
     public function approve(Proposal $proposal, int $approverId, ?string $note = null): void
     {
         DB::transaction(function () use ($proposal, $approverId, $note) {
-            /** @var ProposalApprover $pa */
             $pa = ProposalApprover::where('proposal_id', $proposal->id)
                 ->where('user_id', $approverId)
                 ->firstOrFail();
 
             $pa->update(['approved_at' => now(), 'note' => $note]);
 
+            // Refresh and check if all approvers have approved
             $proposal->refresh();
             if ($proposal->allApproved()) {
                 $certPdf  = $this->reports->generateApprovalCertificate($proposal);

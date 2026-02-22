@@ -9,7 +9,6 @@ use App\Models\BudgetAllocation;
 use App\Models\Disbursement;
 use App\Models\Proposal;
 use App\Models\User;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -28,22 +27,8 @@ class DisbursementController extends Controller
             ->when($request->type, fn ($q, $t) => $q->where('purpose', $t))
             ->latest()
             ->paginate(15)
-            ->withQueryString();
-
-        // Batch-check which disbursements have transactions — one query for the page.
-        // WHY batch: calling ->transactions()->exists() in row() fires N queries.
-        $pageIds = $disbursements->getCollection()->pluck('id');
-        $idsWithTransactions = $pageIds->isEmpty()
-            ? collect()
-            : Disbursement::withoutTrashed()
-                ->whereIn('id', $pageIds)
-                ->whereHas('transactions')
-                ->pluck('id')
-                ->flip(); // flip for O(1) lookup
-
-        $disbursements->getCollection()->transform(
-            fn ($d) => $this->row($d, isset($idsWithTransactions[$d->id]))
-        );
+            ->withQueryString()
+            ->through(fn ($d) => $this->row($d));
 
         return Inertia::render('Admin/Disbursements/Index', [
             'disbursements' => $disbursements,
@@ -55,12 +40,12 @@ class DisbursementController extends Controller
     {
         return Inertia::render('Admin/Disbursements/Create', [
             'allocations'       => BudgetAllocation::withoutTrashed()
-                ->get(['id', 'name', 'amount'])
-                ->map(fn ($a) => [
-                    'id'               => $a->id,
-                    'name'             => $a->name,
-                    'remaining_amount' => (float) $a->remaining_amount,
-                ]),
+                                    ->get(['id', 'name', 'amount'])
+                                    ->map(fn ($a) => [
+                                        'id'               => $a->id,
+                                        'name'             => $a->name,
+                                        'remaining_amount' => $a->remaining_amount,
+                                    ]),
             'pics'              => User::where('role', UserRole::Pic)->get(['id', 'name']),
             'approvedProposals' => $this->approvedProposalList(),
         ]);
@@ -70,12 +55,9 @@ class DisbursementController extends Controller
     {
         $validated = $this->validateDisbursement($request);
 
-        /** @var int $creatorId */
-        $creatorId = auth()->id();
-
         Disbursement::create([
             ...$validated,
-            'created_by' => $creatorId,
+            'created_by' => auth()->id(),
         ]);
 
         return redirect()->route('admin.disbursements.index')
@@ -93,13 +75,13 @@ class DisbursementController extends Controller
 
         $runningBalance = (float) $disbursement->amount;
         $txPayload = $transactions->map(function ($t) use (&$runningBalance) {
-            $runningBalance += $t->type->value === 'income' ? (float) $t->amount : -(float) $t->amount;
+            $runningBalance += $t->type->value === 'income' ? $t->amount : -$t->amount;
             return [
                 'id'               => $t->id,
                 'type'             => $t->type->label(),
                 'type_value'       => $t->type->value,
                 'description'      => $t->description,
-                'amount'           => (float) $t->amount,
+                'amount'           => $t->amount,
                 'transaction_date' => $t->transaction_date->format('d/m/Y'),
                 'running_balance'  => $runningBalance,
                 'created_by_name'  => $t->creator?->name ?? '(dihapus)',
@@ -110,26 +92,26 @@ class DisbursementController extends Controller
 
         return Inertia::render('Admin/Disbursements/Show', [
             'disbursement' => [
-                'id'              => $disbursement->id,
-                'name'            => $disbursement->name,
-                'purpose'         => $disbursement->purpose->label(),
-                'purpose_value'   => $disbursement->purpose->value,
-                'chairperson'     => $disbursement->chairperson,
-                'pic_name'        => $disbursement->pic_name,
-                'allocation_name' => $disbursement->allocation_name,
-                'amount'          => (float) $disbursement->amount,
-                'total_expense'   => (float) $disbursement->total_expense,
-                'total_income'    => (float) $disbursement->total_income,
-                'remaining_funds' => (float) $disbursement->remaining_funds,
-                'realization_pct' => (float) $disbursement->realization_percentage,
-                'status'          => $disbursement->status,
-                'status_label'    => $disbursement->status_label,
-                'days_remaining'  => (int) $disbursement->days_remaining,
-                'start_date'      => $disbursement->start_date->format('d M Y'),
-                'end_date'        => $disbursement->end_date->format('d M Y'),
-                'is_active'       => $disbursement->allowsTransactions(),
-                'from_proposal'   => $disbursement->proposal?->code,
-                'transactions'    => $txPayload,
+                'id'                   => $disbursement->id,
+                'name'                 => $disbursement->name,
+                'purpose'              => $disbursement->purpose->label(),
+                'purpose_value'        => $disbursement->purpose->value,
+                'chairperson'          => $disbursement->chairperson,
+                'pic_name'             => $disbursement->pic_name,
+                'allocation_name'      => $disbursement->allocation_name,
+                'amount'               => $disbursement->amount,
+                'total_expense'        => $disbursement->total_expense,
+                'total_income'         => $disbursement->total_income,
+                'remaining_funds'      => $disbursement->remaining_funds,
+                'realization_pct'      => $disbursement->realization_percentage,
+                'status'               => $disbursement->status,
+                'status_label'         => $disbursement->status_label,
+                'days_remaining'       => $disbursement->days_remaining,
+                'start_date'           => $disbursement->start_date->format('d M Y'),
+                'end_date'             => $disbursement->end_date->format('d M Y'),
+                'is_active'            => $disbursement->allowsTransactions(),
+                'from_proposal'        => $disbursement->proposal?->code,
+                'transactions'         => $txPayload,
             ],
         ]);
     }
@@ -150,12 +132,12 @@ class DisbursementController extends Controller
                 'proposal_id'          => $disbursement->proposal_id,
             ],
             'allocations'       => BudgetAllocation::withoutTrashed()
-                ->get(['id', 'name', 'amount'])
-                ->map(fn ($a) => [
-                    'id'               => $a->id,
-                    'name'             => $a->name,
-                    'remaining_amount' => (float) $a->remaining_amount,
-                ]),
+                                    ->get(['id', 'name', 'amount'])
+                                    ->map(fn ($a) => [
+                                        'id'               => $a->id,
+                                        'name'             => $a->name,
+                                        'remaining_amount' => $a->remaining_amount,
+                                    ]),
             'pics'              => User::where('role', UserRole::Pic)->get(['id', 'name']),
             'approvedProposals' => $this->approvedProposalList(),
         ]);
@@ -172,37 +154,21 @@ class DisbursementController extends Controller
 
     public function destroy(Disbursement $disbursement): RedirectResponse
     {
-        /**
-         * BUSINESS RULE: Disbursement with transactions MUST NOT be deleted.
-         * This is enforced at both:
-         *   1. Database level (foreign key constraint on transactions.disbursement_id)
-         *   2. Controller level (this check, which gives a user-friendly message)
-         * The controller check runs first, preventing a confusing DB exception.
-         */
-        if ($disbursement->transactions()->exists()) {
-            return redirect()->back()->with(
-                'error',
-                'Pencairan tidak dapat dihapus karena memiliki ' .
-                $disbursement->transactions()->count() .
-                ' transaksi terkait. Hapus semua transaksi terlebih dahulu.'
-            );
-        }
-
         $disbursement->delete();
 
         return redirect()->route('admin.disbursements.index')
             ->with('success', 'Pencairan berhasil dihapus.');
     }
 
-    /** API endpoint — return approved proposals for JS fetch in Create form */
-    public function approvedProposals(): JsonResponse
+    /** API-like endpoint: return approved proposals for JS fetch in Create form */
+    public function approvedProposals(): \Illuminate\Http\JsonResponse
     {
         return response()->json($this->approvedProposalList());
     }
 
-    // ── Private helpers ───────────────────────────────────────────
+    // ── Private helpers ───────────────────────────────
 
-    private function row(Disbursement $d, bool $hasTransactions = false): array
+    private function row(Disbursement $d): array
     {
         return [
             'id'              => $d->id,
@@ -211,19 +177,14 @@ class DisbursementController extends Controller
             'purpose_value'   => $d->purpose->value,
             'pic_name'        => $d->pic_name,
             'allocation_name' => $d->allocation_name,
-            'amount'          => (float) $d->amount,
-            'remaining_funds' => (float) $d->remaining_funds,
-            'realization_pct' => (float) $d->realization_percentage,
+            'amount'          => $d->amount,
+            'remaining_funds' => $d->remaining_funds,
+            'realization_pct' => $d->realization_percentage,
             'status'          => $d->status,
             'status_label'    => $d->status_label,
             'start_date'      => $d->start_date->format('d/m/Y'),
             'end_date'        => $d->end_date->format('d/m/Y'),
-            'days_remaining'  => (int) $d->days_remaining,
-            // can_delete tells the frontend whether to enable the delete button
-            'can_delete'      => ! $hasTransactions,
-            'delete_reason'   => $hasTransactions
-                ? 'Pencairan memiliki transaksi terkait dan tidak dapat dihapus.'
-                : null,
+            'days_remaining'  => $d->days_remaining,
         ];
     }
 
@@ -231,7 +192,7 @@ class DisbursementController extends Controller
     {
         return Proposal::where('status', 'approved')
             ->with('pic:id,name')
-            ->whereDoesntHave('disbursement')
+            ->whereDoesntHave('disbursement')   // not yet linked to a disbursement
             ->latest()
             ->get()
             ->map(fn ($p) => [
@@ -241,7 +202,7 @@ class DisbursementController extends Controller
                 'chairperson'     => $p->chairperson,
                 'pic_id'          => $p->pic_id,
                 'pic_name'        => $p->pic?->name,
-                'approved_amount' => (float) $p->approved_amount,
+                'approved_amount' => $p->approved_amount,
                 'start_date'      => $p->start_date->format('Y-m-d'),
                 'end_date'        => $p->end_date->format('Y-m-d'),
             ])

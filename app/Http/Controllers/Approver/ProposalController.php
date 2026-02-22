@@ -18,16 +18,6 @@ class ProposalController extends Controller
 
     public function index(Request $request): Response
     {
-        /**
-         * WHY @var int $userId:
-         *   auth()->id() returns int|string|null per the Guard interface.
-         *   Inside a paginate()->through() closure, Intelephense may flag
-         *   "Undefined method 'id'" when it cannot trace the Guard type.
-         *   Capturing and annotating the value before the query removes the
-         *   ambiguity without suppressing any real runtime error.
-         *
-         * @var int $userId
-         */
         $userId = auth()->id();
 
         $items = ProposalApprover::with(['proposal.applicant', 'proposal.pic'])
@@ -43,10 +33,8 @@ class ProposalController extends Controller
                 'name'            => $pa->proposal->name,
                 'purpose'         => $pa->proposal->purpose_label,
                 'applicant_name'  => $pa->proposal->applicant?->name ?? '-',
-                'proposed_amount' => (float) $pa->proposal->proposed_amount,
-                'approved_amount' => $pa->proposal->approved_amount !== null
-                    ? (float) $pa->proposal->approved_amount
-                    : null,
+                'proposed_amount' => $pa->proposal->proposed_amount,
+                'approved_amount' => $pa->proposal->approved_amount,
                 'status'          => $pa->proposal->status->value,
                 'status_label'    => $pa->proposal->status->label(),
                 'status_color'    => $pa->proposal->status->color(),
@@ -62,10 +50,9 @@ class ProposalController extends Controller
 
     public function show(Proposal $proposal): Response
     {
-        /** @var int $userId */
         $userId = auth()->id();
 
-        /** @var ProposalApprover|null $pa */
+        // Ensure this approver is actually assigned to this proposal
         $pa = ProposalApprover::where('proposal_id', $proposal->id)
             ->where('user_id', $userId)
             ->first();
@@ -76,24 +63,24 @@ class ProposalController extends Controller
 
         return Inertia::render('Approver/Proposals/Show', [
             'proposal' => [
-                'id'               => $proposal->id,
-                'code'             => $proposal->code,
-                'name'             => $proposal->name,
-                'purpose'          => $proposal->purpose_label,
-                'chairperson'      => $proposal->chairperson,
-                'applicant_name'   => $proposal->applicant?->name ?? '-',
-                'pic_name'         => $proposal->pic?->name ?? '-',
-                'proposed_amount'  => (float) $proposal->proposed_amount,
-                'approved_amount'  => $proposal->approved_amount !== null ? (float) $proposal->approved_amount : null,
-                'superadmin_note'  => $proposal->superadmin_note,
-                'status'           => $proposal->status->value,
-                'status_label'     => $proposal->status->label(),
-                'status_color'     => $proposal->status->color(),
-                'start_date'       => $proposal->start_date->format('d/m/Y'),
-                'end_date'         => $proposal->end_date->format('d/m/Y'),
-                'forwarded_at'     => $proposal->forwarded_at?->format('d/m/Y H:i'),
+                'id'              => $proposal->id,
+                'code'            => $proposal->code,
+                'name'            => $proposal->name,
+                'purpose'         => $proposal->purpose_label,
+                'chairperson'     => $proposal->chairperson,
+                'applicant_name'  => $proposal->applicant?->name ?? '-',
+                'pic_name'        => $proposal->pic?->name ?? '-',
+                'proposed_amount' => $proposal->proposed_amount,
+                'approved_amount' => $proposal->approved_amount,
+                'superadmin_note' => $proposal->superadmin_note,
+                'status'          => $proposal->status->value,
+                'status_label'    => $proposal->status->label(),
+                'status_color'    => $proposal->status->color(),
+                'start_date'      => $proposal->start_date->format('d/m/Y'),
+                'end_date'        => $proposal->end_date->format('d/m/Y'),
+                'forwarded_at'    => $proposal->forwarded_at?->format('d/m/Y H:i'),
                 'has_proposal_pdf' => (bool) $proposal->proposal_pdf_path,
-                'approvers'        => $proposal->approvers->map(fn ($a) => [
+                'approvers'       => $proposal->approvers->map(fn ($a) => [
                     'name'        => $a->user?->name ?? '-',
                     'approved'    => $a->hasApproved(),
                     'approved_at' => $a->approved_at?->format('d/m/Y'),
@@ -110,10 +97,8 @@ class ProposalController extends Controller
 
     public function approve(Request $request, Proposal $proposal): RedirectResponse
     {
-        /** @var int $userId */
         $userId = auth()->id();
 
-        /** @var ProposalApprover|null $pa */
         $pa = ProposalApprover::where('proposal_id', $proposal->id)
             ->where('user_id', $userId)
             ->first();
@@ -133,12 +118,10 @@ class ProposalController extends Controller
 
     public function downloadProposalPdf(Proposal $proposal): mixed
     {
-        /** @var int $userId */
-        $userId = auth()->id();
-
+        // Ensure assigned approver only
         abort_unless(
             ProposalApprover::where('proposal_id', $proposal->id)
-                ->where('user_id', $userId)->exists(),
+                ->where('user_id', auth()->id())->exists(),
             403
         );
         abort_unless(
