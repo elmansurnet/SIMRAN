@@ -112,8 +112,8 @@
             <FormField label="Jumlah Disetujui (Rp)" :error="forwardForm.errors.approved_amount" required>
               <div class="relative">
                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">Rp</span>
-                <input v-model="forwardForm.approved_amount" type="number" class="form-input pl-10"
-                       :max="proposal.proposed_amount" step="1000" />
+                <input v-model="forwardForm.approved_amount" type="text" input="numeric" class="form-input pl-10"
+                       :max="proposal.proposed_amount"/>
               </div>
               <p class="text-xs text-gray-400 mt-1">Maks: {{ fmt(proposal.proposed_amount) }}</p>
             </FormField>

@@ -60,7 +60,7 @@
           <FormField label="Jumlah Anggaran yang Diusulkan (Rp)" :error="form.errors.proposed_amount" required>
             <div class="relative">
               <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">Rp</span>
-              <input v-model="form.proposed_amount" type="number" class="form-input pl-10" placeholder="0" min="1" step="1000" />
+              <input v-model="form.proposed_amount" type="text" input="numeric" class="form-input pl-10" placeholder="0" />
             </div>
             <p v-if="form.proposed_amount" class="text-xs text-gray-400 mt-1">
               {{ fmt(Number(form.proposed_amount)) }}
