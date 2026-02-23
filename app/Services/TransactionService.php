@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Disbursement;
 use App\Models\Transaction;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -20,12 +21,14 @@ class TransactionService
         }
 
         return $disbursement->transactions()->create([
-            'created_by'       => auth()->id(),
-            'type'             => $data['type'],
-            'transaction_date' => $data['transaction_date'],
-            'description'      => $data['description'],
-            'amount'           => $data['amount'],
-            'proof_path'       => $proofPath,
+            // ✅ Auth::id() is statically typed; auth()->id() uses __call() magic
+            //    which Intelephense cannot resolve statically → "Undefined method 'id'".
+            'created_by'          => Auth::id(),
+            'type'                => $data['type'],
+            'transaction_date'    => $data['transaction_date'],
+            'description'         => $data['description'],
+            'amount'              => $data['amount'],
+            'proof_path'          => $proofPath,
             'proof_original_name' => $proofName,
         ]);
     }
@@ -36,7 +39,6 @@ class TransactionService
         $proofName = $transaction->proof_original_name;
 
         if ($proof) {
-            // Delete old proof file if it exists
             if ($proofPath && Storage::exists($proofPath)) {
                 Storage::delete($proofPath);
             }
@@ -44,11 +46,11 @@ class TransactionService
         }
 
         $transaction->update([
-            'type'             => $data['type'],
-            'transaction_date' => $data['transaction_date'],
-            'description'      => $data['description'],
-            'amount'           => $data['amount'],
-            'proof_path'       => $proofPath,
+            'type'                => $data['type'],
+            'transaction_date'    => $data['transaction_date'],
+            'description'         => $data['description'],
+            'amount'              => $data['amount'],
+            'proof_path'          => $proofPath,
             'proof_original_name' => $proofName,
         ]);
 
@@ -57,7 +59,6 @@ class TransactionService
 
     public function delete(Transaction $transaction): void
     {
-        // Clean up proof file
         if ($transaction->proof_path && Storage::exists($transaction->proof_path)) {
             Storage::delete($transaction->proof_path);
         }

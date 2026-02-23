@@ -3,7 +3,6 @@
 
     <!-- ── Welcome Banner ─────────────────────────────── -->
     <div class="bg-gradient-to-r from-green-800 via-green-700 to-emerald-600 rounded-2xl p-5 sm:p-6 mb-6 text-white overflow-hidden relative animate-fade-in">
-      <!-- Background decoration -->
       <div class="absolute -right-8 -top-8 w-40 h-40 bg-white/5 rounded-full"></div>
       <div class="absolute -right-2 -bottom-4 w-24 h-24 bg-white/5 rounded-full"></div>
       <div class="relative">
@@ -23,7 +22,7 @@
       </div>
     </div>
 
-    <!-- ── Low Budget Alerts (Superadmin) ─────────────── -->
+    <!-- ── Low Budget Alerts (Superadmin / Auditor) ─── -->
     <div v-if="lowBudgetAlerts?.length" class="mb-6 animate-slide-down">
       <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
         <div class="flex items-start space-x-3">
@@ -48,42 +47,58 @@
     <!-- ── Stats Grid ──────────────────────────────────── -->
     <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-6 stagger-children">
 
-      <!-- Superadmin Stats -->
+      <!-- SUPERADMIN Stats -->
       <template v-if="user.role_value === 'superadmin'">
-        <StatCard label="Total Anggaran"         :value="stats.total_budget"        icon="💰" color="green"  :delay="0" />
-        <StatCard label="Total Pencairan"        :value="stats.total_disbursed"     icon="📋" color="blue"   :delay="80" />
-        <StatCard label="Sisa Anggaran"          :value="stats.remaining_budget"    icon="🏦" color="teal"   :delay="160" />
-        <StatCard label="Total Realisasi"        :value="stats.total_expense"       icon="📉" color="red"    :delay="240" />
-        <StatCard label="Total Pemasukan"        :value="stats.total_income"        icon="📈" color="teal"   :delay="320" />
-        <StatCard label="Kas Saat Ini"           :value="stats.current_cash"        icon="💵" color="green"  :delay="400" :highlight="true" />
-        <StatCard label="Total Pengguna"         :value="stats.total_users"         icon="👥" color="purple" :delay="480" :is-currency="false" />
-        <StatCard label="Kegiatan Aktif"         :value="stats.active_disbursements" icon="🔔" color="orange" :delay="560" :is-currency="false" />
-        <StatCard label="Total Pencairan (semua)" :value="stats.total_disbursements" icon="📌" color="indigo" :delay="640" :is-currency="false" />
+        <StatCard label="Total Anggaran"          :value="num(stats.total_budget)"        icon="💰" color="green"  :delay="0" />
+        <StatCard label="Total Pencairan"         :value="num(stats.total_disbursed)"     icon="📋" color="blue"   :delay="80" />
+        <StatCard label="Sisa Anggaran"           :value="num(stats.remaining_budget)"    icon="🏦" color="teal"   :delay="160" />
+        <StatCard label="Total Realisasi"         :value="num(stats.total_expense)"       icon="📉" color="red"    :delay="240" />
+        <StatCard label="Total Pemasukan"         :value="num(stats.total_income)"        icon="📈" color="teal"   :delay="320" />
+        <StatCard label="Kas Saat Ini"            :value="num(stats.current_cash)"        icon="💵" color="green"  :delay="400" :highlight="true" />
+        <StatCard label="Total Pengguna"          :value="num(stats.total_users)"         icon="👥" color="purple" :delay="480" :is-currency="false" />
+        <StatCard label="Kegiatan Aktif"          :value="num(stats.active_disbursements)" icon="🔔" color="orange" :delay="560" :is-currency="false" />
+        <StatCard label="Total Pencairan (semua)" :value="num(stats.total_disbursements)" icon="📌" color="indigo" :delay="640" :is-currency="false" />
       </template>
 
       <!-- PIC Stats -->
       <template v-else-if="user.role_value === 'pic'">
-        <StatCard label="Total Dana Pencairan"  :value="stats.total_disbursed"     icon="💰" color="green"  :delay="0" />
-        <StatCard label="Total Pengeluaran"     :value="stats.total_expense"       icon="📉" color="red"    :delay="80" />
-        <StatCard label="Total Pemasukan"       :value="stats.total_income"        icon="📈" color="teal"   :delay="160" />
-        <StatCard label="Sisa Dana Keseluruhan" :value="stats.remaining_funds"     icon="💵" color="green"  :delay="240" :highlight="true" />
-        <StatCard label="Kegiatan Aktif"        :value="stats.active_disbursements" icon="🔔" color="orange" :delay="320" :is-currency="false" />
-        <StatCard label="Total Kegiatan"        :value="stats.total_disbursements" icon="📋" color="blue"   :delay="400" :is-currency="false" />
+        <StatCard label="Total Dana Pencairan"  :value="num(stats.total_disbursed)"      icon="💰" color="green"  :delay="0" />
+        <StatCard label="Total Pengeluaran"     :value="num(stats.total_expense)"        icon="📉" color="red"    :delay="80" />
+        <StatCard label="Total Pemasukan"       :value="num(stats.total_income)"         icon="📈" color="teal"   :delay="160" />
+        <StatCard label="Sisa Dana Keseluruhan" :value="num(stats.remaining_funds)"      icon="💵" color="green"  :delay="240" :highlight="true" />
+        <StatCard label="Kegiatan Aktif"        :value="num(stats.active_disbursements)" icon="🔔" color="orange" :delay="320" :is-currency="false" />
+        <StatCard label="Total Kegiatan"        :value="num(stats.total_disbursements)"  icon="📋" color="blue"   :delay="400" :is-currency="false" />
       </template>
 
-      <!-- Auditor Stats -->
-      <template v-else>
-        <StatCard label="Total Anggaran"      :value="stats.total_budget"        icon="💰" color="green"  :delay="0" />
-        <StatCard label="Total Pencairan"     :value="stats.total_disbursed"     icon="📋" color="blue"   :delay="80" />
-        <StatCard label="Sisa Anggaran"       :value="stats.remaining_budget"    icon="🏦" color="teal"   :delay="160" />
-        <StatCard label="Total Realisasi"     :value="stats.total_expense"       icon="📉" color="red"    :delay="240" />
-        <StatCard label="Total Pemasukan"     :value="stats.total_income"        icon="📈" color="teal"   :delay="320" />
-        <StatCard label="Kas Saat Ini"        :value="stats.current_cash"        icon="💵" color="green"  :delay="400" :highlight="true" />
+      <!-- AUDITOR Stats -->
+      <template v-else-if="user.role_value === 'auditor'">
+        <StatCard label="Total Anggaran"      :value="num(stats.total_budget)"      icon="💰" color="green"  :delay="0" />
+        <StatCard label="Total Pencairan"     :value="num(stats.total_disbursed)"   icon="📋" color="blue"   :delay="80" />
+        <StatCard label="Sisa Anggaran"       :value="num(stats.remaining_budget)"  icon="🏦" color="teal"   :delay="160" />
+        <StatCard label="Total Realisasi"     :value="num(stats.total_expense)"     icon="📉" color="red"    :delay="240" />
+        <StatCard label="Total Pemasukan"     :value="num(stats.total_income)"      icon="📈" color="teal"   :delay="320" />
+        <StatCard label="Kas Saat Ini"        :value="num(stats.current_cash)"      icon="💵" color="green"  :delay="400" :highlight="true" />
       </template>
+
+      <!-- APPLICANT Stats -->
+      <template v-else-if="user.role_value === 'applicant'">
+        <StatCard label="Total Proposal"        :value="num(stats.total)"    icon="📄" color="blue"   :delay="0"   :is-currency="false" />
+        <StatCard label="Disetujui"             :value="num(stats.approved)" icon="✅" color="green"  :delay="80"  :is-currency="false" />
+        <StatCard label="Menunggu Persetujuan"  :value="num(stats.pending)"  icon="⏳" color="orange" :delay="160" :is-currency="false" />
+        <StatCard label="Ditolak"               :value="num(stats.rejected)" icon="❌" color="red"    :delay="240" :is-currency="false" />
+      </template>
+
+      <!-- APPROVER Stats -->
+      <template v-else-if="user.role_value === 'approver'">
+        <StatCard label="Menunggu Persetujuan Saya" :value="num(stats.pending_count)"  icon="⏳" color="orange" :delay="0"   :is-currency="false" />
+        <StatCard label="Sudah Saya Setujui"        :value="num(stats.approved_count)" icon="✅" color="green"  :delay="80"  :is-currency="false" />
+        <StatCard label="Total Ditugaskan"          :value="num(stats.total_count)"    icon="📋" color="blue"   :delay="160" :is-currency="false" />
+      </template>
+
     </div>
 
-    <!-- ── Charts + Quick Info ─────────────────────────── -->
-    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
+    <!-- ── Charts (only for roles that have financial charts) ── -->
+    <div v-if="showCharts" class="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
 
       <!-- Line/Bar Chart -->
       <div class="xl:col-span-2 card p-5 animate-fade-in-up" style="animation-delay:200ms">
@@ -98,14 +113,15 @@
         </div>
       </div>
 
-      <!-- Donut chart / quick stats -->
+      <!-- Donut chart -->
       <div class="card p-5 animate-fade-in-up" style="animation-delay:280ms">
         <h3 class="font-semibold text-green-800 mb-4">
-          {{ user.role_value === 'superadmin' || user.role_value === 'auditor' ? 'Utilisasi Anggaran' : 'Utilisasi Dana' }}
+          {{ user.role_value === 'pic' ? 'Utilisasi Dana' : 'Utilisasi Anggaran' }}
         </h3>
         <div class="relative h-40 flex items-center justify-center">
           <canvas ref="donutCanvas" class="absolute inset-0" />
           <div class="text-center z-10 pointer-events-none">
+            <!-- ✅ toFixed() is safe: donutPct is always a number (0 fallback) -->
             <p class="text-2xl font-bold text-green-700">{{ donutPct.toFixed(1) }}%</p>
             <p class="text-xs text-gray-400">Terpakai</p>
           </div>
@@ -121,7 +137,7 @@
           <div class="flex items-center justify-between text-xs">
             <div class="flex items-center space-x-1.5">
               <div class="w-3 h-3 rounded-full bg-red-400"></div>
-              <span class="text-gray-600">{{ user.role_value === 'pic' ? 'Terpakai' : 'Terpakai' }}</span>
+              <span class="text-gray-600">Terpakai</span>
             </div>
             <span class="font-medium text-gray-700">{{ fmt(usedForDonut) }}</span>
           </div>
@@ -147,17 +163,82 @@
               {{ d.days_remaining }} hari lagi
             </span>
           </div>
-          <ProgressBar :percentage="d.realization_pct" size="sm" :show-label="false" class="mb-2" />
+          <ProgressBar :percentage="num(d.realization_pct)" size="sm" :show-label="false" class="mb-2" />
           <div class="flex justify-between text-xs text-gray-500">
-            <span>Realisasi: {{ d.realization_pct.toFixed(1) }}%</span>
+            <!-- ✅ num() ensures always a number before .toFixed() -->
+            <span>Realisasi: {{ num(d.realization_pct).toFixed(1) }}%</span>
             <span class="font-medium text-green-700">Sisa: {{ fmt(d.remaining_funds) }}</span>
           </div>
         </Link>
       </div>
     </div>
 
-    <!-- ── Bottom Grid ─────────────────────────────────── -->
-    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+    <!-- ── Applicant: Proposal List ────────────────────── -->
+    <div v-if="user.role_value === 'applicant'" class="mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-green-800">Proposal Terbaru Saya</h3>
+        <Link :href="route('applicant.proposals.index')" class="text-xs text-green-600 hover:text-green-800 font-medium">
+          Lihat semua →
+        </Link>
+      </div>
+      <div v-if="proposals?.length" class="card divide-y divide-gray-50">
+        <div v-for="p in proposals" :key="p.id"
+             class="px-5 py-3 flex items-center space-x-3 hover:bg-gray-50 transition">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-800 truncate">{{ p.name }}</p>
+            <p class="text-xs text-gray-400 font-mono">{{ p.code }} · {{ p.created_at }}</p>
+          </div>
+          <div class="text-right shrink-0">
+            <span :class="['px-2 py-0.5 rounded-full text-xs font-semibold',
+              p.status_color === 'green' ? 'bg-green-100 text-green-700' :
+              p.status_color === 'red'   ? 'bg-red-100 text-red-700' :
+              p.status_color === 'amber' ? 'bg-amber-100 text-amber-700' :
+              'bg-gray-100 text-gray-600']">
+              {{ p.status_label }}
+            </span>
+            <p class="text-xs text-gray-500 mt-0.5">{{ fmt(p.proposed_amount) }}</p>
+          </div>
+        </div>
+      </div>
+      <div v-else class="card p-8 text-center">
+        <p class="text-sm text-gray-400">Belum ada proposal. <Link :href="route('applicant.proposals.create')" class="text-green-600 font-medium">Ajukan sekarang →</Link></p>
+      </div>
+    </div>
+
+    <!-- ── Approver: Pending Proposals ─────────────────── -->
+    <div v-if="user.role_value === 'approver'" class="mb-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold text-green-800 flex items-center space-x-2">
+          <span v-if="num(stats.pending_count) > 0" class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></span>
+          <span>Proposal Menunggu Persetujuan Saya</span>
+        </h3>
+        <Link :href="route('approver.proposals.index')" class="text-xs text-green-600 hover:text-green-800 font-medium">
+          Lihat semua →
+        </Link>
+      </div>
+      <div v-if="pendingProposals?.length" class="card divide-y divide-gray-50">
+        <Link v-for="p in pendingProposals" :key="p.id"
+              :href="route('approver.proposals.show', p.id)"
+              class="px-5 py-3 flex items-center space-x-3 hover:bg-gray-50 transition block">
+          <div class="w-9 h-9 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-800 truncate">{{ p.name }}</p>
+            <p class="text-xs text-gray-400">{{ p.applicant }} · {{ p.code }}</p>
+          </div>
+          <p class="text-sm font-semibold text-gray-700 shrink-0">{{ fmt(p.proposed_amount) }}</p>
+        </Link>
+      </div>
+      <div v-else class="card p-8 text-center">
+        <p class="text-sm text-gray-400">Tidak ada proposal yang perlu disetujui. ✅</p>
+      </div>
+    </div>
+
+    <!-- ── Bottom Grid (Superadmin / PIC / Auditor) ────── -->
+    <div v-if="showBottomGrid" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
       <!-- Recent Disbursements -->
       <div v-if="recentDisbursements?.length" class="card animate-fade-in-up" style="animation-delay:320ms">
@@ -181,7 +262,8 @@
             </div>
             <div class="text-right shrink-0">
               <p class="text-sm font-semibold text-gray-700">{{ fmt(d.amount) }}</p>
-              <p class="text-xs text-gray-400">{{ d.realization.toFixed(1) }}%</p>
+              <!-- ✅ d.realization: backend now sends this key (was only realization_pct) -->
+              <p class="text-xs text-gray-400">{{ num(d.realization).toFixed(1) }}%</p>
             </div>
           </div>
         </div>
@@ -201,6 +283,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm text-gray-700 truncate">{{ t.description }}</p>
+              <!-- ✅ t.date: backend now sends this key (was only transaction_date) -->
               <p class="text-xs text-gray-400 truncate">{{ t.disbursement_name }} · {{ t.date }}</p>
             </div>
             <p :class="['text-sm font-semibold shrink-0',
@@ -245,6 +328,24 @@
       </a>
     </div>
 
+    <!-- ── Quick Actions (Applicant) ──────────────────── -->
+    <div v-if="user.role_value === 'applicant'" class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Link :href="route('applicant.proposals.create')"
+            class="flex items-center space-x-3 p-4 rounded-xl bg-teal-700 text-white hover:bg-teal-800 transition-all shadow-sm hover:-translate-y-0.5">
+        <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+        </svg>
+        <span class="text-sm font-semibold">Ajukan Proposal Baru</span>
+      </Link>
+      <Link :href="route('applicant.proposals.index')"
+            class="flex items-center space-x-3 p-4 rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-all shadow-sm hover:-translate-y-0.5">
+        <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        <span class="text-sm font-semibold">Lihat Semua Proposal</span>
+      </Link>
+    </div>
+
   </AppLayout>
 </template>
 
@@ -260,12 +361,14 @@ import { Chart, registerables } from 'chart.js'
 Chart.register(...registerables)
 
 const props = defineProps({
+  role:                 String,
   stats:                Object,
   chart_data:           Array,
-  low_budget_alerts:    Array,
   recent_disbursements: Array,
   recent_transactions:  Array,
   active_disbursements: Array,
+  proposals:            Array,   // applicant
+  pending_proposals:    Array,   // approver
 })
 
 const page = usePage()
@@ -275,45 +378,70 @@ const { formatRp: fmt } = useCurrency()
 const chartCanvas = ref(null)
 const donutCanvas = ref(null)
 
-const currentDateTime = computed(() => {
-  return new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
-})
+// ✅ Safe number helper: prevents toFixed() crash when value is undefined/null/NaN.
+//    Root cause of "Cannot read properties of undefined (reading 'toFixed')":
+//    backend sent no value or different key name; this provides a guaranteed numeric default.
+function num(val) {
+  const n = Number(val)
+  return isNaN(n) ? 0 : n
+}
+
+const currentDateTime = computed(() =>
+  new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+)
+
+// ✅ Charts only shown for roles that have financial data (budget/disbursement)
+const showCharts = computed(() =>
+  ['superadmin', 'pic', 'auditor'].includes(user.value?.role_value)
+)
+
+// ✅ Bottom grid (recent disbursements/transactions) only for financial roles
+const showBottomGrid = computed(() =>
+  ['superadmin', 'pic', 'auditor'].includes(user.value?.role_value)
+)
 
 const donutPct = computed(() => {
   const s = props.stats
   if (!s) return 0
-  const total = user.value.role_value === 'pic' ? s.total_disbursed : s.total_budget
-  const used  = user.value.role_value === 'pic' ? s.total_expense   : s.total_disbursed
-  if (!total) return 0
+  const roleVal = user.value?.role_value
+  const total = roleVal === 'pic' ? num(s.total_disbursed) : num(s.total_budget)
+  const used  = roleVal === 'pic' ? num(s.total_expense)   : num(s.total_disbursed)
+  if (total === 0) return 0
   return Math.min((used / total) * 100, 100)
 })
 
 const remainingForDonut = computed(() => {
   const s = props.stats
   if (!s) return 0
-  return user.value.role_value === 'pic' ? s.remaining_funds : s.remaining_budget
+  return user.value?.role_value === 'pic' ? num(s.remaining_funds) : num(s.remaining_budget)
 })
 
 const usedForDonut = computed(() => {
   const s = props.stats
   if (!s) return 0
-  return user.value.role_value === 'pic' ? s.total_expense : s.total_disbursed
+  return user.value?.role_value === 'pic' ? num(s.total_expense) : num(s.total_disbursed)
 })
 
-const lowBudgetAlerts = computed(() => props.low_budget_alerts || [])
+const lowBudgetAlerts    = computed(() => page.props.low_budget_alerts || [])
 const recentDisbursements = computed(() => props.recent_disbursements || [])
-const recentTransactions = computed(() => props.recent_transactions || [])
-const activeDisbursements = computed(() => props.active_disbursements || [])
+const recentTransactions  = computed(() => props.recent_transactions  || [])
+const activeDisbursements = computed(() => props.active_disbursements  || [])
+const proposals           = computed(() => props.proposals || [])
+const pendingProposals    = computed(() => props.pending_proposals || [])
 
-let barChart = null
+let barChart   = null
 let donutChart = null
 
 onMounted(() => {
-  // Bar/Line chart
+  // ── Line/Bar Chart ────────────────────────────────
+  // ✅ chart_data is now an array of {month, expense, income} from backend.
+  //    Previously backend sent monthly_expenses as a keyed object which
+  //    .map(d => d.month) cannot iterate.
   if (chartCanvas.value && props.chart_data?.length) {
-    const labels  = props.chart_data.map(d => d.month)
-    const expenses = props.chart_data.map(d => d.expense)
-    const incomes  = props.chart_data.map(d => d.income || 0)
+    const labels   = props.chart_data.map(d => d.month)
+    const expenses = props.chart_data.map(d => num(d.expense))
+    const incomes  = props.chart_data.map(d => num(d.income))
+
     const datasets = [
       {
         label: 'Pengeluaran',
@@ -327,7 +455,7 @@ onMounted(() => {
         pointRadius: 4,
       },
     ]
-    if (user.value.role_value !== 'pic') {
+    if (user.value?.role_value !== 'pic') {
       datasets.push({
         label: 'Pemasukan',
         data: incomes,
@@ -340,6 +468,7 @@ onMounted(() => {
         pointRadius: 4,
       })
     }
+
     barChart = new Chart(chartCanvas.value, {
       type: 'line',
       data: { labels, datasets },
@@ -370,15 +499,15 @@ onMounted(() => {
     })
   }
 
-  // Donut chart
-  if (donutCanvas.value) {
-    const used      = donutPct.value
+  // ── Donut Chart ───────────────────────────────────
+  if (donutCanvas.value && showCharts.value) {
+    const used      = num(donutPct.value)
     const remaining = Math.max(100 - used, 0)
     donutChart = new Chart(donutCanvas.value, {
       type: 'doughnut',
       data: {
         datasets: [{
-          data: [used, remaining],
+          data: [used || 0.001, remaining],  // avoid all-zero data crash
           backgroundColor: ['#16a34a', '#dcfce7'],
           borderWidth: 0,
           hoverOffset: 4,

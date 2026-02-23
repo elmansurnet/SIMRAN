@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Approver;
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Models\ProposalApprover;
+use App\Models\User;
 use App\Services\ProposalService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -18,7 +20,9 @@ class ProposalController extends Controller
 
     public function index(Request $request): Response
     {
-        $userId = auth()->id();
+        // ✅ Auth::id() is statically typed as int|string|null by the Auth facade.
+        //    auth()->id() proxies through __call() which Intelephense cannot resolve.
+        $userId = Auth::id();
 
         $items = ProposalApprover::with(['proposal.applicant', 'proposal.pic'])
             ->where('user_id', $userId)
@@ -50,9 +54,8 @@ class ProposalController extends Controller
 
     public function show(Proposal $proposal): Response
     {
-        $userId = auth()->id();
+        $userId = Auth::id();
 
-        // Ensure this approver is actually assigned to this proposal
         $pa = ProposalApprover::where('proposal_id', $proposal->id)
             ->where('user_id', $userId)
             ->first();
@@ -97,7 +100,7 @@ class ProposalController extends Controller
 
     public function approve(Request $request, Proposal $proposal): RedirectResponse
     {
-        $userId = auth()->id();
+        $userId = Auth::id();
 
         $pa = ProposalApprover::where('proposal_id', $proposal->id)
             ->where('user_id', $userId)
@@ -111,17 +114,16 @@ class ProposalController extends Controller
             'note' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $this->service->approve($proposal, $userId, $validated['note'] ?? null);
+        $this->service->approve($proposal, (int) $userId, $validated['note'] ?? null);
 
         return back()->with('success', 'Proposal berhasil disetujui.');
     }
 
     public function downloadProposalPdf(Proposal $proposal): mixed
     {
-        // Ensure assigned approver only
         abort_unless(
             ProposalApprover::where('proposal_id', $proposal->id)
-                ->where('user_id', auth()->id())->exists(),
+                ->where('user_id', Auth::id())->exists(),
             403
         );
         abort_unless(

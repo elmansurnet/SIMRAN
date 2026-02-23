@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Enums\UserRole;
 use App\Models\BudgetAllocation;
 use App\Models\Disbursement;
+use App\Models\Proposal;
+use App\Models\ProposalApprover;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -15,6 +18,10 @@ class DashboardController extends Controller
 {
     public function index(Request $request): Response
     {
+        // ✅ @var annotation: $request->user() returns Authenticatable|null.
+        //    Without this, Intelephense reports "Undefined property 'role'" because
+        //    the Authenticatable interface has no typed properties.
+        /** @var \App\Models\User $user */
         $user = $request->user();
 
         return match ($user->role) {
@@ -32,10 +39,8 @@ class DashboardController extends Controller
     // ─────────────────────────────────────────────────────────
     private function superadminDashboard(): Response
     {
-        // ❌ FIX: eager-load withTrashed relationships so deleted PIC/allocation
-        //         names never throw "Attempt to read property on null".
         $recentDisbursements = Disbursement::with([
-            'pic:id,name',               // withTrashed() is set on the relation itself
+            'pic:id,name',
             'budgetAllocation:id,name',
         ])
             ->withoutTrashed()
@@ -45,12 +50,14 @@ class DashboardController extends Controller
             ->map(fn ($d) => [
                 'id'              => $d->id,
                 'name'            => $d->name,
-                // ✅ Null-safe: uses model accessor that returns fallback string
                 'pic_name'        => $d->pic_name,
                 'allocation_name' => $d->allocation_name,
-                'amount'          => $d->amount,
+                'amount'          => (float) $d->amount,
                 'remaining_funds' => $d->remaining_funds,
+                // ✅ Both keys: 'realization_pct' for active-disbursements section,
+                //    'realization' for the recent-disbursements list (dashboard crash fix).
                 'realization_pct' => $d->realization_percentage,
+                'realization'     => $d->realization_percentage,
                 'status'          => $d->status,
                 'status_label'    => $d->status_label,
                 'days_remaining'  => $d->days_remaining,
@@ -59,7 +66,7 @@ class DashboardController extends Controller
             ]);
 
         $recentTransactions = Transaction::with([
-            'disbursement:id,name',  // safe — doesn't null-crash if disb is soft-deleted
+            'disbursement:id,name',
             'creator:id,name',
         ])
             ->latest('transaction_date')
@@ -70,55 +77,64 @@ class DashboardController extends Controller
                 'type'             => $t->type->label(),
                 'type_value'       => $t->type->value,
                 'description'      => $t->description,
-                'amount'           => $t->amount,
+                'amount'           => (float) $t->amount,
+                // ✅ 'date' key: Dashboard.vue accesses t.date (not t.transaction_date)
+                'date'             => $t->transaction_date->format('d/m/Y'),
                 'transaction_date' => $t->transaction_date->format('d/m/Y'),
-                // ✅ Null-safe — disbursement may be soft-deleted
                 'disbursement_name' => $t->disbursement?->name ?? '(Pencairan dihapus)',
                 'created_by_name'  => $t->creator?->name ?? '(Pengguna dihapus)',
             ]);
 
-        // Budget stats
         $totalBudget    = (float) BudgetAllocation::sum('amount');
         $totalDisbursed = (float) Disbursement::withoutTrashed()->sum('amount');
         $totalExpense   = (float) Transaction::where('type', 'expense')->sum('amount');
         $totalIncome    = (float) Transaction::where('type', 'income')->sum('amount');
 
-        // Monthly expense chart (last 6 months)
-        $monthlyExpenses = [];
+        // ✅ chart_data: Vue expects array of {month, expense, income}.
+        //    Previously sent as a keyed object ('monthly_expenses') which Vue
+        //    cannot iterate with .map(d => d.month).
+        $chartData = [];
         for ($i = 5; $i >= 0; $i--) {
             $month = now()->subMonths($i);
-            $label = $month->format('M Y');
-            $monthlyExpenses[$label] = (float) Transaction::where('type', 'expense')
-                ->whereYear('transaction_date',  $month->year)
-                ->whereMonth('transaction_date', $month->month)
-                ->sum('amount');
+            $chartData[] = [
+                'month'   => $month->format('M Y'),
+                'expense' => (float) Transaction::where('type', 'expense')
+                    ->whereYear('transaction_date', $month->year)
+                    ->whereMonth('transaction_date', $month->month)
+                    ->sum('amount'),
+                'income'  => (float) Transaction::where('type', 'income')
+                    ->whereYear('transaction_date', $month->year)
+                    ->whereMonth('transaction_date', $month->month)
+                    ->sum('amount'),
+            ];
         }
 
-        // Disbursement count by status
         $activeCount = Disbursement::withoutTrashed()
             ->whereDate('start_date', '<=', today())
             ->whereDate('end_date', '>=', today())
             ->count();
 
-        // Low-budget allocations (already shared in HandleInertiaRequests, but keep here for dashboard card)
-        $lowBudgetCount = BudgetAllocation::withoutTrashed()->get()
-            ->filter(fn ($a) => $a->utilization_percentage >= 80)
-            ->count();
+        $totalDisbursements = Disbursement::withoutTrashed()->count();
 
         return Inertia::render('Dashboard', [
-            'role'                => 'superadmin',
+            'role'       => 'superadmin',
+            // ✅ Stat keys now match Dashboard.vue exactly
             'stats' => [
-                'total_budget'     => $totalBudget,
-                'total_disbursed'  => $totalDisbursed,
-                'remaining_budget' => $totalBudget - $totalDisbursed,
-                'total_expense'    => $totalExpense,
-                'total_income'     => $totalIncome,
-                'current_cash'     => $totalDisbursed - $totalExpense + $totalIncome,
-                'active_count'     => $activeCount,
-                'low_budget_count' => $lowBudgetCount,
-                'user_count'       => User::whereIn('role', ['pic', 'auditor', 'applicant', 'approver'])->count(),
+                'total_budget'        => $totalBudget,
+                'total_disbursed'     => $totalDisbursed,
+                'remaining_budget'    => $totalBudget - $totalDisbursed,
+                'total_expense'       => $totalExpense,
+                'total_income'        => $totalIncome,
+                'current_cash'        => $totalDisbursed - $totalExpense + $totalIncome,
+                // ✅ renamed: active_count → active_disbursements (Vue expects this key)
+                'active_disbursements' => $activeCount,
+                // ✅ renamed: user_count → total_users (Vue expects this key)
+                'total_users'         => User::whereIn('role', ['pic', 'auditor', 'applicant', 'approver'])->count(),
+                // ✅ added: Vue shows stats.total_disbursements in third StatCard row
+                'total_disbursements' => $totalDisbursements,
             ],
-            'monthly_expenses'    => $monthlyExpenses,
+            // ✅ renamed: monthly_expenses → chart_data with array format
+            'chart_data'           => $chartData,
             'recent_disbursements' => $recentDisbursements,
             'recent_transactions'  => $recentTransactions,
         ]);
@@ -129,7 +145,8 @@ class DashboardController extends Controller
     // ─────────────────────────────────────────────────────────
     private function picDashboard(User $user): Response
     {
-        $disbursements = Disbursement::with(['budgetAllocation:id,name'])
+        // ✅ renamed key: disbursements → active_disbursements (Vue uses active_disbursements)
+        $activeDisbursements = Disbursement::with(['budgetAllocation:id,name'])
             ->withoutTrashed()
             ->where('pic_id', $user->id)
             ->latest()
@@ -139,9 +156,10 @@ class DashboardController extends Controller
                 'id'              => $d->id,
                 'name'            => $d->name,
                 'allocation_name' => $d->allocation_name,
-                'amount'          => $d->amount,
+                'amount'          => (float) $d->amount,
                 'remaining_funds' => $d->remaining_funds,
                 'realization_pct' => $d->realization_percentage,
+                'realization'     => $d->realization_percentage,
                 'status'          => $d->status,
                 'status_label'    => $d->status_label,
                 'days_remaining'  => $d->days_remaining,
@@ -159,29 +177,54 @@ class DashboardController extends Controller
                 'type'             => $t->type->label(),
                 'type_value'       => $t->type->value,
                 'description'      => $t->description,
-                'amount'           => $t->amount,
+                'amount'           => (float) $t->amount,
+                'date'             => $t->transaction_date->format('d/m/Y'),
                 'transaction_date' => $t->transaction_date->format('d/m/Y'),
                 'disbursement_name' => $t->disbursement?->name ?? '(Pencairan dihapus)',
             ]);
 
         $totalDisbursed = (float) Disbursement::where('pic_id', $user->id)->sum('amount');
-        $totalExpense   = (float) Transaction::where('created_by', $user->id)
-                              ->where('type', 'expense')->sum('amount');
+        $totalExpense   = (float) Transaction::where('created_by', $user->id)->where('type', 'expense')->sum('amount');
+        // ✅ added: total_income was missing, Vue uses it for StatCard
+        $totalIncome    = (float) Transaction::where('created_by', $user->id)->where('type', 'income')->sum('amount');
         $activeCount    = Disbursement::where('pic_id', $user->id)
                               ->whereDate('start_date', '<=', today())
                               ->whereDate('end_date', '>=', today())
                               ->count();
 
+        // ✅ added: chart_data for PIC line chart (6-month expense trend)
+        $chartData = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month = now()->subMonths($i);
+            $chartData[] = [
+                'month'   => $month->format('M Y'),
+                'expense' => (float) Transaction::where('created_by', $user->id)
+                    ->where('type', 'expense')
+                    ->whereYear('transaction_date', $month->year)
+                    ->whereMonth('transaction_date', $month->month)
+                    ->sum('amount'),
+                'income'  => 0.0,
+            ];
+        }
+
         return Inertia::render('Dashboard', [
-            'role'                => 'pic',
+            'role'       => 'pic',
             'stats' => [
-                'total_disbursed' => $totalDisbursed,
-                'total_expense'   => $totalExpense,
-                'active_count'    => $activeCount,
-                'total_count'     => Disbursement::where('pic_id', $user->id)->count(),
+                'total_disbursed'     => $totalDisbursed,
+                'total_expense'       => $totalExpense,
+                // ✅ added: total_income missing previously
+                'total_income'        => $totalIncome,
+                // ✅ added: remaining_funds was missing, Vue uses it
+                'remaining_funds'     => $totalDisbursed - $totalExpense + $totalIncome,
+                // ✅ renamed: active_count → active_disbursements
+                'active_disbursements' => $activeCount,
+                // ✅ renamed: total_count → total_disbursements
+                'total_disbursements' => Disbursement::where('pic_id', $user->id)->count(),
             ],
-            'disbursements'       => $disbursements,
-            'recent_transactions' => $recentTransactions,
+            'chart_data'           => $chartData,
+            // ✅ renamed: disbursements → active_disbursements
+            'active_disbursements' => $activeDisbursements,
+            'recent_transactions'  => $recentTransactions,
         ]);
     }
 
@@ -190,9 +233,10 @@ class DashboardController extends Controller
     // ─────────────────────────────────────────────────────────
     private function auditorDashboard(): Response
     {
-        $totalBudget  = (float) BudgetAllocation::sum('amount');
-        $totalExpense = (float) Transaction::where('type', 'expense')->sum('amount');
-        $totalIncome  = (float) Transaction::where('type', 'income')->sum('amount');
+        $totalBudget    = (float) BudgetAllocation::sum('amount');
+        $totalDisbursed = (float) Disbursement::withoutTrashed()->sum('amount');
+        $totalExpense   = (float) Transaction::where('type', 'expense')->sum('amount');
+        $totalIncome    = (float) Transaction::where('type', 'income')->sum('amount');
 
         $recentDisbursements = Disbursement::with(['pic:id,name', 'budgetAllocation:id,name'])
             ->withoutTrashed()->latest()->take(5)->get()
@@ -200,21 +244,43 @@ class DashboardController extends Controller
                 'id'              => $d->id,
                 'name'            => $d->name,
                 'pic_name'        => $d->pic_name,
-                'amount'          => $d->amount,
+                'amount'          => (float) $d->amount,
+                // ✅ both keys for auditor dashboard
                 'realization_pct' => $d->realization_percentage,
+                'realization'     => $d->realization_percentage,
                 'status'          => $d->status,
                 'status_label'    => $d->status_label,
             ]);
 
+        $chartData = [];
+        for ($i = 5; $i >= 0; $i--) {
+            $month = now()->subMonths($i);
+            $chartData[] = [
+                'month'   => $month->format('M Y'),
+                'expense' => (float) Transaction::where('type', 'expense')
+                    ->whereYear('transaction_date', $month->year)
+                    ->whereMonth('transaction_date', $month->month)
+                    ->sum('amount'),
+                'income'  => (float) Transaction::where('type', 'income')
+                    ->whereYear('transaction_date', $month->year)
+                    ->whereMonth('transaction_date', $month->month)
+                    ->sum('amount'),
+            ];
+        }
+
         return Inertia::render('Dashboard', [
             'role'  => 'auditor',
             'stats' => [
-                'total_budget'   => $totalBudget,
-                'total_expense'  => $totalExpense,
-                'total_income'   => $totalIncome,
-                'current_cash'   => $totalBudget - $totalExpense + $totalIncome,
-                'disbursement_count' => Disbursement::withoutTrashed()->count(),
+                'total_budget'        => $totalBudget,
+                // ✅ added: total_disbursed and remaining_budget were missing for auditor
+                'total_disbursed'     => $totalDisbursed,
+                'remaining_budget'    => $totalBudget - $totalDisbursed,
+                'total_expense'       => $totalExpense,
+                'total_income'        => $totalIncome,
+                'current_cash'        => $totalBudget - $totalExpense + $totalIncome,
+                'disbursement_count'  => Disbursement::withoutTrashed()->count(),
             ],
+            'chart_data'           => $chartData,
             'recent_disbursements' => $recentDisbursements,
         ]);
     }
@@ -224,7 +290,7 @@ class DashboardController extends Controller
     // ─────────────────────────────────────────────────────────
     private function applicantDashboard(User $user): Response
     {
-        $proposals = \App\Models\Proposal::where('applicant_id', $user->id)
+        $proposals = Proposal::where('applicant_id', $user->id)
             ->latest()->take(5)->get()
             ->map(fn ($p) => [
                 'id'              => $p->id,
@@ -233,17 +299,18 @@ class DashboardController extends Controller
                 'status'          => $p->status->value,
                 'status_label'    => $p->status->label(),
                 'status_color'    => $p->status->color(),
-                'proposed_amount' => $p->proposed_amount,
-                'approved_amount' => $p->approved_amount,
+                'proposed_amount' => (float) $p->proposed_amount,
+                'approved_amount' => $p->approved_amount ? (float) $p->approved_amount : null,
                 'created_at'      => $p->created_at->format('d/m/Y'),
             ]);
 
         return Inertia::render('Dashboard', [
             'role'      => 'applicant',
             'stats' => [
-                'total'    => \App\Models\Proposal::where('applicant_id', $user->id)->count(),
-                'approved' => \App\Models\Proposal::where('applicant_id', $user->id)->where('status', 'approved')->count(),
-                'pending'  => \App\Models\Proposal::where('applicant_id', $user->id)->whereIn('status', ['draft','forwarded'])->count(),
+                'total'    => Proposal::where('applicant_id', $user->id)->count(),
+                'approved' => Proposal::where('applicant_id', $user->id)->where('status', 'approved')->count(),
+                'pending'  => Proposal::where('applicant_id', $user->id)->whereIn('status', ['draft', 'forwarded'])->count(),
+                'rejected' => Proposal::where('applicant_id', $user->id)->where('status', 'rejected')->count(),
             ],
             'proposals' => $proposals,
         ]);
@@ -254,25 +321,26 @@ class DashboardController extends Controller
     // ─────────────────────────────────────────────────────────
     private function approverDashboard(User $user): Response
     {
-        $pending = \App\Models\ProposalApprover::with(['proposal.applicant'])
+        $pending = ProposalApprover::with(['proposal.applicant'])
             ->where('user_id', $user->id)
             ->whereNull('approved_at')
             ->latest()
             ->take(5)
             ->get()
             ->map(fn ($pa) => [
-                'id'           => $pa->proposal->id,
-                'code'         => $pa->proposal->code,
-                'name'         => $pa->proposal->name,
-                'applicant'    => $pa->proposal->applicant?->name ?? '-',
-                'proposed_amount' => $pa->proposal->proposed_amount,
+                'id'              => $pa->proposal->id,
+                'code'            => $pa->proposal->code,
+                'name'            => $pa->proposal->name,
+                'applicant'       => $pa->proposal->applicant?->name ?? '-',
+                'proposed_amount' => (float) $pa->proposal->proposed_amount,
             ]);
 
         return Inertia::render('Dashboard', [
             'role'  => 'approver',
             'stats' => [
-                'pending_count'  => \App\Models\ProposalApprover::where('user_id', $user->id)->whereNull('approved_at')->count(),
-                'approved_count' => \App\Models\ProposalApprover::where('user_id', $user->id)->whereNotNull('approved_at')->count(),
+                'pending_count'  => ProposalApprover::where('user_id', $user->id)->whereNull('approved_at')->count(),
+                'approved_count' => ProposalApprover::where('user_id', $user->id)->whereNotNull('approved_at')->count(),
+                'total_count'    => ProposalApprover::where('user_id', $user->id)->count(),
             ],
             'pending_proposals' => $pending,
         ]);

@@ -6,6 +6,7 @@ use App\Enums\ProposalStatus;
 use App\Models\Proposal;
 use App\Models\ProposalApprover;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
@@ -20,7 +21,9 @@ class ProposalService
             $proposal = Proposal::create([
                 'code'            => Proposal::generateCode(),
                 'status'          => ProposalStatus::Draft,
-                'applicant_id'    => auth()->id(),
+                // ✅ Auth::id() is statically typed; auth()->id() proxies __call()
+                //    which Intelephense reports as "Undefined method 'id'".
+                'applicant_id'    => Auth::id(),
                 'purpose'         => $data['purpose'],
                 'name'            => $data['name'],
                 'start_date'      => $data['start_date'],
@@ -47,10 +50,8 @@ class ProposalService
     public function forward(Proposal $proposal, float $approvedAmount, array $approverIds, ?string $note = null): void
     {
         DB::transaction(function () use ($proposal, $approvedAmount, $approverIds, $note) {
-            // Remove any previous approvers
             $proposal->approvers()->delete();
 
-            // Insert new approvers
             foreach ($approverIds as $userId) {
                 ProposalApprover::create([
                     'proposal_id' => $proposal->id,
@@ -61,7 +62,7 @@ class ProposalService
             $proposal->update([
                 'status'          => ProposalStatus::Forwarded,
                 'approved_amount' => $approvedAmount,
-                'reviewed_by'     => auth()->id(),
+                'reviewed_by'     => Auth::id(),
                 'forwarded_at'    => now(),
                 'superadmin_note' => $note,
             ]);
@@ -73,7 +74,7 @@ class ProposalService
     {
         $proposal->update([
             'status'          => ProposalStatus::Rejected,
-            'reviewed_by'     => auth()->id(),
+            'reviewed_by'     => Auth::id(),
             'superadmin_note' => $note,
         ]);
     }
@@ -91,7 +92,6 @@ class ProposalService
 
             $pa->update(['approved_at' => now(), 'note' => $note]);
 
-            // Refresh and check if all approvers have approved
             $proposal->refresh();
             if ($proposal->allApproved()) {
                 $certPdf  = $this->reports->generateApprovalCertificate($proposal);

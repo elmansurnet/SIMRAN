@@ -11,6 +11,7 @@ use App\Models\Proposal;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -57,7 +58,8 @@ class DisbursementController extends Controller
 
         Disbursement::create([
             ...$validated,
-            'created_by' => auth()->id(),
+            // ✅ Auth::id() instead of auth()->id() — static analysis fix
+            'created_by' => Auth::id(),
         ]);
 
         return redirect()->route('admin.disbursements.index')
@@ -81,7 +83,7 @@ class DisbursementController extends Controller
                 'type'             => $t->type->label(),
                 'type_value'       => $t->type->value,
                 'description'      => $t->description,
-                'amount'           => $t->amount,
+                'amount'           => (float) $t->amount,
                 'transaction_date' => $t->transaction_date->format('d/m/Y'),
                 'running_balance'  => $runningBalance,
                 'created_by_name'  => $t->creator?->name ?? '(dihapus)',
@@ -99,7 +101,7 @@ class DisbursementController extends Controller
                 'chairperson'          => $disbursement->chairperson,
                 'pic_name'             => $disbursement->pic_name,
                 'allocation_name'      => $disbursement->allocation_name,
-                'amount'               => $disbursement->amount,
+                'amount'               => (float) $disbursement->amount,
                 'total_expense'        => $disbursement->total_expense,
                 'total_income'         => $disbursement->total_income,
                 'remaining_funds'      => $disbursement->remaining_funds,
@@ -111,6 +113,8 @@ class DisbursementController extends Controller
                 'end_date'             => $disbursement->end_date->format('d M Y'),
                 'is_active'            => $disbursement->allowsTransactions(),
                 'from_proposal'        => $disbursement->proposal?->code,
+                // ✅ expose deletion ability to UI
+                'can_delete'           => ! $disbursement->transactions()->exists(),
                 'transactions'         => $txPayload,
             ],
         ]);
@@ -154,6 +158,18 @@ class DisbursementController extends Controller
 
     public function destroy(Disbursement $disbursement): RedirectResponse
     {
+        // ✅ PART D – BUSINESS CONSTRAINT:
+        //    A disbursement with existing transactions MUST NOT be deleted.
+        //    This prevents orphaned transaction records and data loss.
+        //    Enforced at controller level in addition to DB foreign key constraint.
+        if ($disbursement->transactions()->exists()) {
+            $count = $disbursement->transactions()->count();
+            return back()->with(
+                'error',
+                "Pencairan '{$disbursement->name}' tidak dapat dihapus karena memiliki {$count} transaksi. Hapus semua transaksi terlebih dahulu."
+            );
+        }
+
         $disbursement->delete();
 
         return redirect()->route('admin.disbursements.index')
@@ -177,7 +193,7 @@ class DisbursementController extends Controller
             'purpose_value'   => $d->purpose->value,
             'pic_name'        => $d->pic_name,
             'allocation_name' => $d->allocation_name,
-            'amount'          => $d->amount,
+            'amount'          => (float) $d->amount,
             'remaining_funds' => $d->remaining_funds,
             'realization_pct' => $d->realization_percentage,
             'status'          => $d->status,
@@ -185,6 +201,8 @@ class DisbursementController extends Controller
             'start_date'      => $d->start_date->format('d/m/Y'),
             'end_date'        => $d->end_date->format('d/m/Y'),
             'days_remaining'  => $d->days_remaining,
+            // ✅ expose can_delete in index list for UI disable logic
+            'can_delete'      => ! $d->transactions()->exists(),
         ];
     }
 
@@ -192,7 +210,7 @@ class DisbursementController extends Controller
     {
         return Proposal::where('status', 'approved')
             ->with('pic:id,name')
-            ->whereDoesntHave('disbursement')   // not yet linked to a disbursement
+            ->whereDoesntHave('disbursement')
             ->latest()
             ->get()
             ->map(fn ($p) => [

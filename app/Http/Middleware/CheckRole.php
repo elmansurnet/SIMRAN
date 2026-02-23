@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -17,6 +18,11 @@ class CheckRole
      */
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
+        // ✅ PHPDoc annotation: tells Intelephense this is App\Models\User,
+        //    which has the typed `role` property (cast to UserRole enum).
+        //    auth()->user() returns Authenticatable|null and Intelephense cannot
+        //    resolve ->role on that interface; the @var resolves the ambiguity.
+        /** @var User|null $user */
         $user = auth()->user();
 
         if (! $user) {
