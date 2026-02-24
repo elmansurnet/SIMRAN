@@ -23,31 +23,34 @@
             <input v-model="form.app_name" type="text" class="form-input" placeholder="SIMRAN UNISYA" />
           </FormField>
 
-          <!-- Extra Transaction Days -->
           <FormField
-            label="Hari Tambahan Input Transaksi"
+            label="Hari Tambahan Input Transaksi (Periode Pelaporan)"
             :error="form.errors.extra_transaction_days"
-            hint="Jumlah hari setelah tanggal akhir kegiatan di mana PIC masih bisa menginput transaksi."
+            hint="Jumlah hari setelah tanggal akhir kegiatan di mana PIC masih bisa menginput transaksi. Isi 0 untuk menonaktifkan periode pelaporan."
             required
           >
             <div class="flex items-center space-x-3">
-              <input
-                v-model.number="form.extra_transaction_days"
-                type="number" min="0" max="365"
-                class="form-input w-32"
-                placeholder="0"
-              />
+              <input v-model.number="form.extra_transaction_days"
+                     type="number" min="0" max="365"
+                     class="form-input w-32"
+                     placeholder="0" />
               <span class="text-sm text-gray-500">hari</span>
             </div>
           </FormField>
 
-          <!-- Preview box -->
+          <!-- Live explanation box -->
           <div class="p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800 space-y-1">
             <p class="font-semibold">💡 Cara kerja hari tambahan:</p>
             <p>Misal kegiatan berakhir <strong>30 Jun</strong> dan hari tambahan = <strong>{{ form.extra_transaction_days || 0 }}</strong>:</p>
-            <p>→ PIC masih bisa input transaksi sampai <strong>{{ previewDeadline }}</strong></p>
-            <p>→ Status kegiatan berubah menjadi <strong>"Persiapan Laporan"</strong> selama periode ini</p>
-            <p>→ Setelah itu transaksi dikunci sepenuhnya</p>
+            <ul class="list-disc list-inside space-y-0.5 mt-1">
+              <li>Fase 1 (Akan Datang): PIC sudah bisa input rencana transaksi</li>
+              <li>Fase 2 (Aktif): transaksi berjalan normal</li>
+              <li v-if="(form.extra_transaction_days || 0) > 0">
+                Fase 3 (Periode Pelaporan): masih bisa input s/d
+                <strong>{{ previewDeadline }}</strong>
+              </li>
+              <li>Fase 4 (Selesai): transaksi dikunci sepenuhnya</li>
+            </ul>
           </div>
 
           <div class="pt-2">
@@ -65,10 +68,13 @@
         </form>
       </div>
 
-      <!-- Approvers Info Card -->
+      <!-- Active approvers info -->
       <div class="card p-6 mt-5 animate-fade-in-up" style="animation-delay:80ms">
         <h3 class="font-semibold text-green-800 mb-3">Daftar Approver Aktif</h3>
-        <p class="text-sm text-gray-500 mb-4">Approver dipilih per-proposal saat meneruskan. Tambah/hapus approver di menu <strong>Manajemen Pengguna</strong>.</p>
+        <p class="text-sm text-gray-500 mb-4">
+          Approver dipilih per-proposal saat meneruskan.
+          Tambah/hapus approver di menu <strong>Manajemen Pengguna</strong>.
+        </p>
         <div v-if="approvers.length" class="space-y-2">
           <div v-for="a in approvers" :key="a.id"
                class="flex items-center space-x-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
@@ -81,7 +87,7 @@
             </div>
           </div>
         </div>
-        <p v-else class="text-sm text-gray-400 italic">Belum ada pengguna dengan role Approver.</p>
+        <p v-else class="text-sm text-gray-400 italic">Belum ada approver terdaftar.</p>
       </div>
     </div>
   </AppLayout>
@@ -93,19 +99,22 @@ import { useForm } from '@inertiajs/vue3'
 import AppLayout from '@/Layouts/AppLayout.vue'
 import FormField from '@/Components/FormField.vue'
 
-const props = defineProps({ settings: Object, approvers: Array })
+const props = defineProps({
+  settings:  Object,
+  approvers: Array,
+})
 
 const form = useForm({
   app_name:               props.settings.app_name,
   extra_transaction_days: props.settings.extra_transaction_days,
 })
 
+// Live deadline preview using a fixed example date of June 30
 const previewDeadline = computed(() => {
-  const days = form.extra_transaction_days || 0
-  const d = new Date()
-  d.setMonth(5); d.setDate(30) // 30 Jun example
-  d.setDate(d.getDate() + days)
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+  const base  = new Date('2025-06-30')
+  const days  = parseInt(form.extra_transaction_days) || 0
+  base.setDate(base.getDate() + days)
+  return base.toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })
 })
 
 function submit() {

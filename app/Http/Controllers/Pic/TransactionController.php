@@ -7,141 +7,197 @@ use App\Http\Requests\TransactionRequest;
 use App\Models\Disbursement;
 use App\Models\Transaction;
 use App\Services\TransactionService;
-use Illuminate\Foundation\Auth\Access\AuthorizesRequests;  // ✅ FIX: adds $this->authorize()
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Gate;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
-use Inertia\Response;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TransactionController extends Controller
 {
-    // ✅ FIX ERROR 2: Trait provides $this->authorize() — was missing, causing "Call to undefined method"
-    use AuthorizesRequests;
-
     public function __construct(private TransactionService $service) {}
 
-    public function create(Request $request, Disbursement $disbursement): Response
+    /* ── CREATE ──────────────────────────────────────── */
+
+    public function create(Request $request, Disbursement $disbursement): \Inertia\Response
     {
-        $this->authorize('create', [Transaction::class, $disbursement]);
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless(
+            $disbursement->allowsTransactions(),
+            403,
+            'Periode kegiatan dan masa pelaporan telah berakhir.'
+        );
 
         return Inertia::render('Pic/Transactions/Create', [
-            'disbursement' => $this->disbursementPayload($disbursement),
+            'disbursement' => [
+                'id'                   => $disbursement->id,
+                'name'                 => $disbursement->name,
+                'start_date'           => $disbursement->start_date->format('Y-m-d'),
+                'end_date'             => $disbursement->end_date->format('Y-m-d'),
+                'transaction_deadline' => $disbursement->transaction_deadline, // Y-m-d :max for date input
+                'remaining_funds'      => $disbursement->remaining_funds,
+                'amount'               => (float) $disbursement->amount,
+                'status'               => $disbursement->status,
+                'status_label'         => $disbursement->status_label,
+            ],
         ]);
     }
 
     public function store(TransactionRequest $request, Disbursement $disbursement): RedirectResponse
     {
-        $this->authorize('create', [Transaction::class, $disbursement]);
+        /** @var \App\Models\User $user */
+        $user = $request->user();
 
-        $this->service->create($disbursement, $request->validated(), $request->file('proof'));
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($disbursement->allowsTransactions(), 403, 'Periode pencairan telah berakhir.');
 
-        return redirect()
-            ->route('pic.disbursements.show', $disbursement)
+        $this->service->create(
+            $request->validated(),
+            $user->id,
+            $disbursement,
+            $request->file('proof')
+        );
+
+        return redirect()->route('pic.disbursements.show', $disbursement)
             ->with('success', 'Transaksi berhasil ditambahkan.');
     }
 
-    public function edit(Request $request, Disbursement $disbursement, Transaction $transaction): Response
-    {
-        $this->authorize('update', $transaction);
+    /* ── EDIT / UPDATE ───────────────────────────────── */
 
-        // Ensure the transaction belongs to this disbursement
-        abort_if($transaction->disbursement_id !== $disbursement->id, 404);
+    public function edit(Request $request, Disbursement $disbursement, Transaction $transaction): \Inertia\Response
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($transaction->disbursement_id === $disbursement->id, 403);
+        abort_unless($transaction->created_by === $user->id, 403, 'Hanya bisa mengedit transaksi milik Anda.');
+        abort_unless($disbursement->allowsTransactions(), 403, 'Periode pencairan telah berakhir.');
 
         return Inertia::render('Pic/Transactions/Edit', [
-            'disbursement' => $this->disbursementPayload($disbursement),
-            'transaction'  => $this->transactionPayload($transaction),
+            'disbursement' => [
+                'id'                   => $disbursement->id,
+                'name'                 => $disbursement->name,
+                'start_date'           => $disbursement->start_date->format('Y-m-d'),
+                'end_date'             => $disbursement->end_date->format('Y-m-d'),
+                'transaction_deadline' => $disbursement->transaction_deadline,
+                'status'               => $disbursement->status,
+                'status_label'         => $disbursement->status_label,
+            ],
+            'transaction' => [
+                'id'               => $transaction->id,
+                'type'             => $transaction->type->value,
+                'transaction_date' => $transaction->transaction_date->format('Y-m-d'),
+                'description'      => $transaction->description,
+                'amount'           => (float) $transaction->amount,
+                'proof_name'       => $transaction->proof_original_name,
+            ],
         ]);
     }
 
     public function update(TransactionRequest $request, Disbursement $disbursement, Transaction $transaction): RedirectResponse
     {
-        $this->authorize('update', $transaction);
-        abort_if($transaction->disbursement_id !== $disbursement->id, 404);
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($transaction->disbursement_id === $disbursement->id, 403);
+        abort_unless($transaction->created_by === $user->id, 403, 'Hanya bisa mengedit transaksi milik Anda.');
+        abort_unless($disbursement->allowsTransactions(), 403, 'Periode pencairan telah berakhir.');
 
         $this->service->update($transaction, $request->validated(), $request->file('proof'));
 
-        return redirect()
-            ->route('pic.disbursements.show', $disbursement)
+        return redirect()->route('pic.disbursements.show', $disbursement)
             ->with('success', 'Transaksi berhasil diperbarui.');
     }
 
-    public function destroy(Disbursement $disbursement, Transaction $transaction): RedirectResponse
+    /* ── DESTROY (single) ────────────────────────────── */
+
+    public function destroy(Request $request, Disbursement $disbursement, Transaction $transaction): RedirectResponse
     {
-        $this->authorize('delete', $transaction);
-        abort_if($transaction->disbursement_id !== $disbursement->id, 404);
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($transaction->disbursement_id === $disbursement->id, 403);
+        abort_unless($transaction->created_by === $user->id, 403, 'Hanya bisa menghapus transaksi milik Anda.');
+        abort_unless(
+            $disbursement->allowsTransactions(),
+            403,
+            'Transaksi tidak bisa dihapus setelah periode pelaporan berakhir.'
+        );
 
         $this->service->delete($transaction);
 
-        return redirect()
-            ->route('pic.disbursements.show', $disbursement)
-            ->with('success', 'Transaksi berhasil dihapus.');
+        return back()->with('success', 'Transaksi berhasil dihapus.');
     }
 
-    /**
-     * ✅ FIX ERROR 3: Proof download via signed URL.
-     * - Works for PIC (owner), Superadmin, Auditor.
-     * - Signed URL validated first, then policy check.
-     * - No $this->authorize() needed — uses Gate::denies() which works without the trait.
-     *   (Belt-and-suspenders: trait is present anyway via class-level use.)
-     */
-    public function downloadProof(Request $request, Transaction $transaction): StreamedResponse
-    {
-        // Validate signed URL (QR codes embed a temporary signed route)
-        abort_unless($request->hasValidSignature(), 403, 'Link tidak valid atau sudah kedaluwarsa.');
+    /* ── BATCH DESTROY ───────────────────────────────── */
 
-        // Policy check — allows owner PIC, Superadmin, Auditor
-        if (Gate::denies('downloadProof', $transaction)) {
-            abort(403, 'Anda tidak memiliki izin untuk mengunduh bukti ini.');
+    public function batchDestroy(Request $request, Disbursement $disbursement): RedirectResponse
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless(
+            $disbursement->allowsTransactions(),
+            403,
+            'Transaksi tidak bisa dihapus setelah periode pelaporan berakhir.'
+        );
+
+        $validated = $request->validate([
+            'ids'   => ['required', 'array', 'min:1'],
+            'ids.*' => ['required', 'integer', 'exists:transactions,id'],
+        ]);
+
+        // Only delete transactions that belong to this disbursement AND were created by this PIC
+        $transactions = Transaction::whereIn('id', $validated['ids'])
+            ->where('disbursement_id', $disbursement->id)
+            ->where('created_by', $user->id)
+            ->get();
+
+        if ($transactions->count() !== count($validated['ids'])) {
+            return back()->with(
+                'error',
+                'Beberapa transaksi yang dipilih tidak valid atau bukan milik Anda.'
+            );
         }
 
-        abort_unless($transaction->hasProof(), 404, 'Bukti tidak ditemukan.');
+        DB::transaction(function () use ($transactions) {
+            foreach ($transactions as $tx) {
+                $this->service->delete($tx);
+            }
+        });
 
-        $fullPath = storage_path('app/' . $transaction->proof_path);
-        abort_unless(file_exists($fullPath), 404, 'File bukti tidak ditemukan di server.');
-
-        $mime     = mime_content_type($fullPath) ?: 'application/octet-stream';
-        $filename = $transaction->proof_original_name ?? basename($fullPath);
-
-        return response()->streamDownload(
-            fn () => readfile($fullPath),
-            $filename,
-            ['Content-Type' => $mime, 'Content-Disposition' => 'inline; filename="' . $filename . '"']
-        );
+        return back()->with('success', $transactions->count() . ' transaksi berhasil dihapus.');
     }
 
-    // ── Private helpers ───────────────────────────────
+    /* ── PROOF DOWNLOAD ──────────────────────────────── */
 
-    private function disbursementPayload(Disbursement $d): array
+    /**
+     * Serve proof files inline (for browser view and QR code scan).
+     */
+    public function downloadProof(Request $request, Transaction $transaction)
     {
-        $d->loadMissing(['pic:id,name', 'budgetAllocation:id,name']);
+        if (! $request->hasValidSignature()) {
+            abort(403, 'Link bukti tidak valid atau telah kedaluwarsa.');
+        }
 
-        return [
-            'id'              => $d->id,
-            'name'            => $d->name,
-            'start_date'      => $d->start_date->format('Y-m-d'),
-            'end_date'        => $d->end_date->format('Y-m-d'),
-            'amount'          => $d->amount,
-            'remaining_funds' => $d->remaining_funds,
-            'is_active'       => $d->allowsTransactions(),
-            'status'          => $d->status,
-            'status_label'    => $d->status_label,
-            'pic_name'        => $d->pic_name,
-            'allocation_name' => $d->allocation_name,
-        ];
-    }
+        abort_unless($transaction->hasProof(), 404, 'Bukti tidak tersedia.');
 
-    private function transactionPayload(Transaction $t): array
-    {
-        return [
-            'id'               => $t->id,
-            'type'             => $t->type->value,
-            'transaction_date' => $t->transaction_date->format('Y-m-d'),
-            'description'      => $t->description,
-            'amount'           => $t->amount,
-            'proof_name'       => $t->proof_original_name,
-            'has_proof'        => $t->hasProof(),
-        ];
+        // 🔑 GUNAKAN STORAGE (SAMA SEPERTI ZIP)
+        abort_unless(Storage::exists($transaction->proof_path), 404, 'File tidak ditemukan.');
+
+        $path = Storage::path($transaction->proof_path);
+
+        return response()->file($path, [
+            'Content-Type'        => mime_content_type($path) ?: 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="'.$transaction->proof_original_name.'"',
+        ]);
     }
 }

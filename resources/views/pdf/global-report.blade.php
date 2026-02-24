@@ -211,7 +211,7 @@
           </div>
         </td>
         <td>
-          <span class="badge {{ $d->isActive() ? 'badge-green' : ($d->isExpired() ? 'badge-gray' : 'badge-blue') }}">
+          <span class="badge {{ $d->isActive() ? 'badge-green' : ($d->isFullyExpired() ? 'badge-gray' : 'badge-blue') }}">
             {{ $d->status_label }}
           </span>
         </td>

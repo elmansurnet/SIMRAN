@@ -4,8 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
-use App\Models\User;
-use App\Enums\UserRole;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,14 +13,11 @@ class SettingController extends Controller
 {
     public function index(): Response
     {
-        $approvers = User::where('role', UserRole::Approver)->get(['id', 'name', 'email']);
-
         return Inertia::render('Admin/Settings/Index', [
             'settings' => [
                 'extra_transaction_days' => (int) Setting::get('extra_transaction_days', 0),
                 'app_name'               => Setting::get('app_name', 'SIMRAN UNISYA'),
             ],
-            'approvers' => $approvers,
         ]);
     }
 

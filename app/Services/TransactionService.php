@@ -5,44 +5,53 @@ namespace App\Services;
 use App\Models\Disbursement;
 use App\Models\Transaction;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class TransactionService
 {
-    public function create(Disbursement $disbursement, array $data, ?UploadedFile $proof = null): Transaction
-    {
-        $proofPath = null;
-        $proofName = null;
+    /**
+     * Create a new transaction.
+     * Signature preserved from the original codebase.
+     */
+    public function create(
+        array $data,
+        int $userId,
+        Disbursement $disbursement,
+        ?UploadedFile $proof = null
+    ): Transaction {
+        [$proofPath, $proofOriginalName] = $this->storeProof($proof, $disbursement->id);
 
-        if ($proof) {
-            [$proofPath, $proofName] = $this->storeProof($proof, $disbursement->id);
-        }
-
-        return $disbursement->transactions()->create([
-            // ✅ Auth::id() is statically typed; auth()->id() uses __call() magic
-            //    which Intelephense cannot resolve statically → "Undefined method 'id'".
-            'created_by'          => Auth::id(),
+        return Transaction::create([
+            'disbursement_id'     => $disbursement->id,
+            'created_by'          => $userId,
             'type'                => $data['type'],
             'transaction_date'    => $data['transaction_date'],
             'description'         => $data['description'],
             'amount'              => $data['amount'],
             'proof_path'          => $proofPath,
-            'proof_original_name' => $proofName,
+            'proof_original_name' => $proofOriginalName,
         ]);
     }
 
-    public function update(Transaction $transaction, array $data, ?UploadedFile $proof = null): Transaction
-    {
-        $proofPath = $transaction->proof_path;
-        $proofName = $transaction->proof_original_name;
+    /**
+     * Update an existing transaction.
+     * Replaces the proof file only when a new file is uploaded.
+     */
+    public function update(
+        Transaction $transaction,
+        array $data,
+        ?UploadedFile $proof = null
+    ): Transaction {
+        $proofPath         = $transaction->proof_path;
+        $proofOriginalName = $transaction->proof_original_name;
 
         if ($proof) {
-            if ($proofPath && Storage::exists($proofPath)) {
-                Storage::delete($proofPath);
+            // Delete the old proof from disk before replacing
+            if ($proofPath && Storage::disk('local')->exists($proofPath)) {
+                Storage::disk('local')->delete($proofPath);
             }
-            [$proofPath, $proofName] = $this->storeProof($proof, $transaction->disbursement_id);
+            [$proofPath, $proofOriginalName] = $this->storeProof($proof, $transaction->disbursement_id);
         }
 
         $transaction->update([
@@ -51,28 +60,37 @@ class TransactionService
             'description'         => $data['description'],
             'amount'              => $data['amount'],
             'proof_path'          => $proofPath,
-            'proof_original_name' => $proofName,
+            'proof_original_name' => $proofOriginalName,
         ]);
 
         return $transaction->fresh();
     }
 
+    /**
+     * Delete a transaction and remove its proof file from disk.
+     */
     public function delete(Transaction $transaction): void
     {
-        if ($transaction->proof_path && Storage::exists($transaction->proof_path)) {
-            Storage::delete($transaction->proof_path);
+        if ($transaction->proof_path
+            && Storage::disk('local')->exists($transaction->proof_path)) {
+            Storage::disk('local')->delete($transaction->proof_path);
         }
         $transaction->delete();
     }
 
-    private function storeProof(UploadedFile $file, int $disbursementId): array
-    {
-        $extension    = $file->getClientOriginalExtension();
-        $originalName = $file->getClientOriginalName();
-        $storedName   = Str::uuid() . '.' . $extension;
-        $path         = "proofs/{$disbursementId}/{$storedName}";
+    // ── Private helpers ────────────────────────────────
 
-        Storage::put($path, file_get_contents($file));
+    /** @return array{0: string|null, 1: string|null} */
+    private function storeProof(?UploadedFile $file, int $disbursementId): array
+    {
+        if (! $file) {
+            return [null, null];
+        }
+
+        $ext          = $file->getClientOriginalExtension();
+        $storedName   = Str::uuid() . '.' . $ext;
+        $path         = $file->storeAs('proofs/' . $disbursementId, $storedName, 'local');
+        $originalName = $file->getClientOriginalName();
 
         return [$path, $originalName];
     }

@@ -7,8 +7,6 @@ use App\Models\Disbursement;
 use App\Services\ReportService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ReportController extends Controller
@@ -16,41 +14,42 @@ class ReportController extends Controller
     public function __construct(private ReportService $service) {}
 
     /**
-     * Generate a PDF report for a disbursement.
-     * Accessible by the owning PIC, Superadmin, and Auditor.
+     * Generate and stream the PIC PDF report.
+     *
+     * $this->authorize() works because the base Controller now has the
+     * AuthorizesRequests trait (see app/Http/Controllers/Controller.php).
      */
     public function picReport(Request $request, Disbursement $disbursement): Response
     {
-        // Manual authorization — works for any role that passes the policy
-        if (Gate::denies('printReport', $disbursement)) {
-            abort(403, 'Anda tidak memiliki izin untuk mencetak laporan ini.');
-        }
+        $this->authorize('printReport', $disbursement);
 
         $pdf = $this->service->generatePicPdf($disbursement);
 
         return response($pdf, 200, [
             'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="laporan-' . Str::slug($disbursement->name) . '-' . now()->format('Ymd') . '.pdf"',
+            'Content-Disposition' => 'inline; filename="laporan-' . \Str::slug($disbursement->name) . '.pdf"',
         ]);
     }
 
     /**
-     * Download a ZIP of all proof files for a disbursement.
-     * Accessible via signed URL by the owning PIC or Superadmin.
+     * Download ZIP of all proof files for a disbursement.
+     *
+     * This route is placed OUTSIDE the role:pic middleware group (same as
+     * proof download) so that Superadmin and Auditor can download the ZIP.
+     * It is secured by a temporary signed URL generated in ReportService.
+     *
+     * Route name: disbursements.proofs.zip  (no pic. prefix)
+     * This matches exactly what ReportService::generatePicPdf() encodes in the QR code.
      */
     public function downloadProofsZip(Request $request, Disbursement $disbursement): BinaryFileResponse
     {
         abort_unless($request->hasValidSignature(), 403, 'Link tidak valid atau sudah kedaluwarsa.');
-
-        if (Gate::denies('printReport', $disbursement)) {
-            abort(403, 'Anda tidak memiliki izin untuk mengunduh bukti ini.');
-        }
+        $this->authorize('printReport', $disbursement);
 
         $zipPath = $this->service->buildProofZip($disbursement);
 
-        return response()->download(
-            $zipPath,
-            'bukti-' . Str::slug($disbursement->name) . '-' . now()->format('Ymd') . '.zip'
-        )->deleteFileAfterSend(true);
+        return response()
+            ->download($zipPath, 'bukti-' . $disbursement->id . '.zip')
+            ->deleteFileAfterSend(true);
     }
 }

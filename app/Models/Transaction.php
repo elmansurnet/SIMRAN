@@ -46,4 +46,11 @@ class Transaction extends Model
             ? -(float) $this->amount
             : (float) $this->amount;
     }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->withTrashed()
+            ->where($field ?? $this->getRouteKeyName(), $value)
+            ->firstOrFail();
+    }
 }

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Route;
 
 require __DIR__ . '/auth.php';
 
-/* ── PUBLIC (no auth) ────────────────────────────────── */
+/* ── PUBLIC ──────────────────────────────────────────── */
 Route::get('proposals/search', [PublicCtrl\ProposalSearchController::class, 'index'])
      ->name('proposals.search');
 Route::get('proposals/search/{code}', [PublicCtrl\ProposalSearchController::class, 'show'])
@@ -19,53 +19,62 @@ Route::get('proposals/search/{code}', [PublicCtrl\ProposalSearchController::clas
 Route::get('proposals/{proposal}/certificate', [PublicCtrl\ProposalSearchController::class, 'downloadCertificate'])
      ->name('proposals.certificate.download');
 
+Route::get('shared/transactions/{transaction}/proof', [Pic\TransactionController::class, 'downloadProof'])
+     ->name('transactions.proof.download')->middleware('signed');
+Route::get('shared/disbursements/{disbursement}/proofs-zip', [Pic\ReportController::class, 'downloadProofsZip'])
+     ->name('disbursements.proofs.zip')->middleware('signed');
+
 /* ── AUTHENTICATED ───────────────────────────────────── */
 Route::middleware('auth')->group(function () {
 
-    /* Dashboard */
-    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::get('/', fn () => redirect()->route('dashboard'));
+    /* ── Dashboard & Profile ────────────────────────────────── */
+        Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+        Route::get('/', fn () => redirect()->route('dashboard'));
+        Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+        Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
 
-    /* Profile */
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        /* ── SHARED DOWNLOAD ROUTES ─────────────────────────────────
+        |
+        | These two routes MUST live outside any role-specific middleware
+        | so that Superadmin, Auditor, and PIC can all reach them.
+        |
+        | Authorization is enforced by the policy (TransactionPolicy and
+        | DisbursementPolicy), not by route-level role checks.
+        |
+        | Route names MUST match what ReportService::generatePicPdf() encodes
+        | in the QR codes:
+        |   'transactions.proof.download'   (no pic. prefix)
+        |   'disbursements.proofs.zip'      (no pic. prefix)
+        |
+        ─────────────────────────────────────────────────────────── */
 
-    /* ── SHARED ROUTES (authorization via Gate/Policy, no role middleware) ─ */
+        // Route::get('transactions/{transaction}/proof', [Pic\TransactionController::class, 'downloadProofAuth'])
+        // ->name('transactions.proof.auth');
 
-    // Disbursement PDF report — Superadmin, Auditor, owning PIC
-    Route::get('disbursements/{disbursement}/report',
-        [Pic\ReportController::class, 'picReport']
-    )->name('disbursements.report');
+        // // Individual proof file — serves inline; opened via click or QR scan
+        // Route::get(
+        //     'shared/transactions/{transaction}/proof',
+        //     [Pic\TransactionController::class, 'downloadProof']
+        // )->name('transactions.proof.download');
 
-    // Proof ZIP download (signed URL)
-    Route::get('disbursements/{disbursement}/proofs-zip',
-        [Pic\ReportController::class, 'downloadProofsZip']
-    )->name('disbursements.proofs.zip');
-
-    // Proof file download (signed URL, used by QR codes)
-    Route::get('transactions/{transaction}/proof',
-        [Pic\TransactionController::class, 'downloadProof']
-    )->name('transactions.proof.download');
+        // // ZIP of all proofs — requires valid signed URL from QR code
+        // Route::get(
+        //     'shared/disbursements/{disbursement}/proofs-zip',
+        //     [Pic\ReportController::class, 'downloadProofsZip']
+        // )->name('disbursements.proofs.zip');
 
     /* ── SUPERADMIN ───────────────────────────────────── */
     Route::middleware('role:superadmin')->prefix('admin')->name('admin.')->group(function () {
 
-        // Budget Allocations
         Route::resource('budget-allocations', Admin\BudgetAllocationController::class);
-
-        // Disbursements (with proposal fetch helper)
         Route::resource('disbursements', Admin\DisbursementController::class);
         Route::get('approved-proposals', [Admin\DisbursementController::class, 'approvedProposals'])
              ->name('disbursements.approved-proposals');
-
-        // Users
         Route::resource('users', Admin\UserController::class);
 
-        // Reports
         Route::get('reports', [Admin\ReportController::class, 'index'])->name('reports.index');
         Route::get('reports/global/pdf', [Admin\ReportController::class, 'globalPdf'])->name('reports.global');
 
-        // Proposals
         Route::get('proposals', [Admin\ProposalController::class, 'index'])->name('proposals.index');
         Route::get('proposals/{proposal}', [Admin\ProposalController::class, 'show'])->name('proposals.show');
         Route::post('proposals/{proposal}/forward', [Admin\ProposalController::class, 'forward'])->name('proposals.forward');
@@ -73,36 +82,53 @@ Route::middleware('auth')->group(function () {
         Route::get('proposals/{proposal}/pdf', [Admin\ProposalController::class, 'downloadProposalPdf'])->name('proposals.pdf');
         Route::get('proposals/{proposal}/certificate', [Admin\ProposalController::class, 'downloadCertificate'])->name('proposals.certificate');
 
-        // Settings
         Route::get('settings', [Admin\SettingController::class, 'index'])->name('settings.index');
         Route::put('settings', [Admin\SettingController::class, 'update'])->name('settings.update');
     });
 
-    /* ── PIC ──────────────────────────────────────────── */
+    /* ── PIC ─────────────────────────────────────────────────── */
     Route::middleware('role:pic')->prefix('pic')->name('pic.')->group(function () {
 
+        // Disbursement list & detail
         Route::get('disbursements', [Pic\DisbursementController::class, 'index'])
              ->name('disbursements.index');
         Route::get('disbursements/{disbursement}', [Pic\DisbursementController::class, 'show'])
              ->name('disbursements.show');
 
-        Route::get('disbursements/{disbursement}/transactions/create',
+        // PDF report (generated on-the-fly; no signed URL needed)
+        Route::get('disbursements/{disbursement}/report', [Pic\ReportController::class, 'picReport'])
+             ->name('disbursements.report');
+
+        // ── Transaction CRUD — all gated by EnsureActivityActive ──
+
+        // Batch delete MUST be declared before the {transaction} wildcard
+        Route::delete(
+            'disbursements/{disbursement}/transactions',
+            [Pic\TransactionController::class, 'batchDestroy']
+        )->middleware('activity.active')->name('disbursements.transactions.batch-destroy');
+
+        Route::get(
+            'disbursements/{disbursement}/transactions/create',
             [Pic\TransactionController::class, 'create']
         )->middleware('activity.active')->name('disbursements.transactions.create');
 
-        Route::post('disbursements/{disbursement}/transactions',
+        Route::post(
+            'disbursements/{disbursement}/transactions',
             [Pic\TransactionController::class, 'store']
         )->middleware('activity.active')->name('disbursements.transactions.store');
 
-        Route::get('disbursements/{disbursement}/transactions/{transaction}/edit',
+        Route::get(
+            'disbursements/{disbursement}/transactions/{transaction}/edit',
             [Pic\TransactionController::class, 'edit']
         )->middleware('activity.active')->name('disbursements.transactions.edit');
 
-        Route::put('disbursements/{disbursement}/transactions/{transaction}',
+        Route::put(
+            'disbursements/{disbursement}/transactions/{transaction}',
             [Pic\TransactionController::class, 'update']
         )->middleware('activity.active')->name('disbursements.transactions.update');
 
-        Route::delete('disbursements/{disbursement}/transactions/{transaction}',
+        Route::delete(
+            'disbursements/{disbursement}/transactions/{transaction}',
             [Pic\TransactionController::class, 'destroy']
         )->middleware('activity.active')->name('disbursements.transactions.destroy');
     });

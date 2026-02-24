@@ -10,21 +10,19 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureActivityActive
 {
     /**
-     * Checks whether the disbursement in the route allows new transactions.
+     * Gate all transaction write routes (create, store, edit, update, destroy, batchDestroy).
      *
-     * Allowed windows:
-     *   1. Within the strict activity period (start_date – end_date)
-     *   2. Within the grace period (end_date + extra_transaction_days from settings)
+     * Delegates entirely to Disbursement::allowsTransactions() so the
+     * phase logic lives in exactly ONE place (the model).
      *
-     * During grace period the status shows "Persiapan Laporan" in the UI.
-     * After the grace period ends, all transaction creation is blocked.
+     * Allowed:  Phase 1 (Akan Datang), Phase 2 (Aktif), Phase 3 (Periode Pelaporan)
+     * Blocked:  Phase 4 (Selesai) only
      */
     public function handle(Request $request, Closure $next): Response
     {
         /** @var Disbursement|null $disbursement */
         $disbursement = $request->route('disbursement');
 
-        // Route may pass the model directly or just an ID — resolve either way
         if (! $disbursement instanceof Disbursement) {
             $disbursement = Disbursement::find($disbursement);
         }
@@ -33,14 +31,15 @@ class EnsureActivityActive
             abort(404, 'Pencairan tidak ditemukan.');
         }
 
-        // allowsTransactions() checks both active + grace period (see Disbursement model)
         if (! $disbursement->allowsTransactions()) {
+            $message = 'Periode kegiatan dan masa pelaporan telah berakhir. '
+                . 'Transaksi tidak dapat lagi dibuat atau diubah.';
+
             if ($request->wantsJson() || $request->header('X-Inertia')) {
-                return back()->with('error',
-                    'Periode pencairan telah berakhir. Transaksi tidak dapat ditambahkan.'
-                );
+                return back()->with('error', $message);
             }
-            abort(403, 'Periode pencairan telah berakhir. Transaksi tidak dapat ditambahkan.');
+
+            abort(403, $message);
         }
 
         return $next($request);

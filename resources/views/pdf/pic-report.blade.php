@@ -141,7 +141,7 @@
     <tr>
       <td class="lbl">Status</td>
       <td>
-        <span class="badge {{ $disbursement->isActive() ? 'bg-green' : ($disbursement->isExpired() ? 'bg-gray' : 'bg-blue') }}">
+        <span class="badge {{ $disbursement->isActive() ? 'bg-green' : ($disbursement->isFullyExpired() ? 'bg-gray' : 'bg-blue') }}">
           {{ $disbursement->status_label }}
         </span>
       </td>
