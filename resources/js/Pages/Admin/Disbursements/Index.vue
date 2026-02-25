@@ -24,9 +24,9 @@
         </select>
         <select v-model="statusFilter" class="form-input sm:w-44">
           <option value="">Semua Status</option>
+          <option value="upcoming">Persiapan</option>
           <option value="active">Aktif</option>
-          <option value="expired">Selesai</option>
-          <option value="upcoming">Akan Datang</option>
+          <option value="expired">Pelaporan dan Selesai</option>
         </select>
         <button @click="applyFilter" class="btn-primary whitespace-nowrap">Cari</button>
         <button v-if="hasFilter" @click="clearFilter" class="btn-secondary whitespace-nowrap">Reset</button>
@@ -66,18 +66,34 @@
                 <Td>
                   <p class="text-xs whitespace-nowrap">{{ d.start_date }}</p>
                   <p class="text-xs text-gray-400">{{ d.end_date }}</p>
-                  <p v-if="d.status === 'active'" class="text-xs text-green-600 font-medium">{{ d.days_remaining }} hari lagi</p>
+                  <p v-if="d.days_remaining >= 0"
+                    class="text-xs font-medium"
+                    :class="{
+                      'text-blue-600': d.status === 'upcoming',
+                      'text-green-600': d.status === 'active',
+                      'text-amber-600': d.status === 'grace'
+                    }">
+                    <template v-if="d.status === 'upcoming'">
+                      Mulai {{ d.days_remaining }} hari lagi
+                    </template>
+                    <template v-else-if="d.status === 'grace'">
+                      Batas laporan {{ d.days_remaining }} hari lagi
+                    </template>
+                    <template v-else>
+                      Sedang berlangsung
+                    </template>
+                  </p>
                 </Td>
                 <Td class="text-right">
                   <p class="font-medium text-gray-800 whitespace-nowrap">{{ fmt(d.amount) }}</p>
                   <p class="text-xs text-green-600">Sisa: {{ fmt(d.remaining_funds) }}</p>
                 </Td>
                 <Td class="min-w-32">
-                  <ProgressBar :percentage="d.realization_pct" size="sm" :show-label="true" label="" />
+                  <ProgressBar :percentage="Number(d.realization_pct)" size="sm" :show-label="true" label="" />
                 </Td>
                 <Td>
-                  <Badge :color="d.status === 'active' ? 'green' : d.status === 'expired' ? 'gray' : 'blue'" :dot="true">
-                    {{ d.status_label }}
+                  <Badge :color="{active:'green', upcoming:'blue', grace:'amber', expired:'red',}[d.status]":dot="true">
+                  {{ d.status_label }}
                   </Badge>
                 </Td>
                 <Td v-if="canManage">

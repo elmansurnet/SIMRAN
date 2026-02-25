@@ -1,0 +1,606 @@
+oke. sekarang saya ingin merubah logic transaksi yang aktif saat ini. logic tersebut adalah ketika status kegiatan/operasional masih berstatus upcoming atau akan datang, PIC boleh transaksi tapi tetap menggunakan tanggal periode kegiatan/operasional di transaksinya.
+hal ini sangat tidak relevan, karena mengakibatkan transaksi yang dilakukan tidak realtime. Contoh kasus: di tanggal 15 juli 2025, superadmin membuat pencairan anggaran atas nama Kegiatan A dengan periode kegiatan 20-21 juli 2025. karena perlu mempersiapkan kegiatan, akhirnya transaksi dilakukan di tanggal 16 juli 2025. ketika ingin membuat transaksi, PIC tidak bisa memasukkan 16 juli 2025 sebagai tanggal transaksi karena logic transaksi yang aktif saat ini dan ini membuat transaksi menjadi tidak relevan.
+yang saya inginkan PIC bisa transaksi di phase1 (upcoming), phase2 (active), phase3 (grace) dan bisa memilih tanggal transaksi diantara rentang tanggal (mulai dari pencairan anggaran dibuat [kegiatan/operasional dalam status upcoming], kegiatan/operasional active, dan kegiatan/operasional grace). dan transaksi ditutup sepenuhnya setelah kegiatan/operasional masuk ke status selesai (status selesai dihitung berdasar tanggal akhir periode + jumlah hari tambahan periode pelaporan yang sudah dikonfigurasi oleh superadmin di halaman setting)
+
+untuk melengkapi tugas anda, akan saya lampirkan kode yang berhubungan dengan tugas anda ini
+
+file Pic/TransactionController.php yang aktif saat ini
+<?php
+
+namespace App\Http\Controllers\Pic;
+
+use App\Http\Controllers\Controller;
+use App\Http\Requests\TransactionRequest;
+use App\Models\Disbursement;
+use App\Models\Transaction;
+use App\Services\TransactionService;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Inertia\Inertia;
+
+class TransactionController extends Controller
+{
+    public function __construct(private TransactionService $service) {}
+
+    /* ── CREATE ──────────────────────────────────────── */
+
+    public function create(Request $request, Disbursement $disbursement): \Inertia\Response
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless(
+            $disbursement->allowsTransactions(),
+            403,
+            'Periode kegiatan dan masa pelaporan telah berakhir.'
+        );
+
+        return Inertia::render('Pic/Transactions/Create', [
+            'disbursement' => [
+                'id'                   => $disbursement->id,
+                'name'                 => $disbursement->name,
+                'start_date'           => $disbursement->start_date->format('Y-m-d'),
+                'end_date'             => $disbursement->end_date->format('Y-m-d'),
+                'transaction_deadline' => $disbursement->transaction_deadline, // Y-m-d :max for date input
+                'remaining_funds'      => $disbursement->remaining_funds,
+                'amount'               => (float) $disbursement->amount,
+                'status'               => $disbursement->status,
+                'status_label'         => $disbursement->status_label,
+            ],
+        ]);
+    }
+
+    public function store(TransactionRequest $request, Disbursement $disbursement): RedirectResponse
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($disbursement->allowsTransactions(), 403, 'Periode pencairan telah berakhir.');
+
+        $this->service->create(
+            $request->validated(),
+            $user->id,
+            $disbursement,
+            $request->file('proof')
+        );
+
+        return redirect()->route('pic.disbursements.show', $disbursement)
+            ->with('success', 'Transaksi berhasil ditambahkan.');
+    }
+
+    /* ── EDIT / UPDATE ───────────────────────────────── */
+
+    public function edit(Request $request, Disbursement $disbursement, Transaction $transaction): \Inertia\Response
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($transaction->disbursement_id === $disbursement->id, 403);
+        abort_unless($transaction->created_by === $user->id, 403, 'Hanya bisa mengedit transaksi milik Anda.');
+        abort_unless($disbursement->allowsTransactions(), 403, 'Periode pencairan telah berakhir.');
+
+        return Inertia::render('Pic/Transactions/Edit', [
+            'disbursement' => [
+                'id'                   => $disbursement->id,
+                'name'                 => $disbursement->name,
+                'start_date'           => $disbursement->start_date->format('Y-m-d'),
+                'end_date'             => $disbursement->end_date->format('Y-m-d'),
+                'transaction_deadline' => $disbursement->transaction_deadline,
+                'status'               => $disbursement->status,
+                'status_label'         => $disbursement->status_label,
+            ],
+            'transaction' => [
+                'id'                    => $transaction->id,
+                'type'                  => $transaction->type->value,
+                'transaction_date_raw'  => $transaction->transaction_date->format('Y-m-d'),
+                'description'           => $transaction->description,
+                'amount'                => (float) $transaction->amount,
+                'proof_name'            => $transaction->proof_original_name,
+            ],
+        ]);
+    }
+
+    public function update(TransactionRequest $request, Disbursement $disbursement, Transaction $transaction): RedirectResponse
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($transaction->disbursement_id === $disbursement->id, 403);
+        abort_unless($transaction->created_by === $user->id, 403, 'Hanya bisa mengedit transaksi milik Anda.');
+        abort_unless($disbursement->allowsTransactions(), 403, 'Periode pencairan telah berakhir.');
+        
+        $this->service->update($transaction, $request->validated(), $request->file('proof'));
+
+        return redirect()->route('pic.disbursements.show', $disbursement)
+            ->with('success', 'Transaksi berhasil diperbarui.');
+    }
+
+    /* ── DESTROY (single) ────────────────────────────── */
+
+    public function destroy(Request $request, Disbursement $disbursement, Transaction $transaction): RedirectResponse
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless($transaction->disbursement_id === $disbursement->id, 403);
+        abort_unless($transaction->created_by === $user->id, 403, 'Hanya bisa menghapus transaksi milik Anda.');
+        abort_unless(
+            $disbursement->allowsTransactions(),
+            403,
+            'Transaksi tidak bisa dihapus setelah periode pelaporan berakhir.'
+        );
+
+        $this->service->delete($transaction);
+
+        return back()->with('success', 'Transaksi berhasil dihapus.');
+    }
+
+    /* ── BATCH DESTROY ───────────────────────────────── */
+
+    public function batchDestroy(Request $request, Disbursement $disbursement): RedirectResponse
+    {
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+
+        abort_unless($disbursement->pic_id === $user->id, 403);
+        abort_unless(
+            $disbursement->allowsTransactions(),
+            403,
+            'Transaksi tidak bisa dihapus setelah periode pelaporan berakhir.'
+        );
+
+        $validated = $request->validate([
+            'ids'   => ['required', 'array', 'min:1'],
+            'ids.*' => ['required', 'integer', 'exists:transactions,id'],
+        ]);
+
+        // Only delete transactions that belong to this disbursement AND were created by this PIC
+        $transactions = Transaction::whereIn('id', $validated['ids'])
+            ->where('disbursement_id', $disbursement->id)
+            ->where('created_by', $user->id)
+            ->get();
+
+        if ($transactions->count() !== count($validated['ids'])) {
+            return back()->with(
+                'error',
+                'Beberapa transaksi yang dipilih tidak valid atau bukan milik Anda.'
+            );
+        }
+
+        DB::transaction(function () use ($transactions) {
+            foreach ($transactions as $tx) {
+                $this->service->delete($tx);
+            }
+        });
+
+        return back()->with('success', $transactions->count() . ' transaksi berhasil dihapus.');
+    }
+
+    /* ── PROOF DOWNLOAD ──────────────────────────────── */
+
+    /**
+     * Serve proof files inline (for browser view and QR code scan) with facades storage.
+     */
+    public function downloadProof(Request $request, Transaction $transaction)
+    {
+        // 🔐 INTERNAL ACCESS (auth user)
+        if ($request->user()) {
+            abort_unless(
+                $request->user()->isSuperadmin()
+                || $request->user()->isAuditor()
+                || $request->user()->id === $transaction->created_by,
+                403
+            );
+        }
+        // 🌍 PUBLIC ACCESS (QR code)
+        else {
+            abort_unless($request->hasValidSignature(), 403);
+        }
+
+        abort_unless($transaction->hasProof(), 404);
+        abort_unless(Storage::exists($transaction->proof_path), 404);
+
+        return response()->file(
+            Storage::path($transaction->proof_path),
+            [
+                'Content-Type'        => mime_content_type(Storage::path($transaction->proof_path)),
+                'Content-Disposition' => 'inline; filename="'.$transaction->proof_original_name.'"',
+            ]
+        );
+    }
+}
+
+ini file Requests/TransactionRequest.php yang aktif saat ini
+<?php
+
+namespace App\Http\Requests;
+
+use App\Models\Setting;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class TransactionRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return $this->user()->isPic();
+    }
+
+    public function rules(): array
+    {
+        /** @var \App\Models\Disbursement $disbursement */
+        $disbursement = $this->route('disbursement');
+
+        // Upper bound = end_date + grace days (the model accessor).
+        // This is correct for both create AND update.
+        // During Phase 1 (Akan Datang) the lower bound still prevents dates before
+        // start_date, but the transaction button is shown and the form is reachable.
+        $maxDate = $disbursement->transaction_deadline;
+
+        $proofRule = $this->isMethod('PUT') || $this->isMethod('PATCH')
+            ? ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120']  // optional on update
+            : ['nullable', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120']; // already nullable on create
+
+        return [
+            'type'             => ['required', Rule::in(['expense', 'income'])],
+            'transaction_date' => [
+                'required',
+                'date',
+                'after_or_equal:' . $disbursement->start_date->toDateString(),
+                'before_or_equal:' . $maxDate,
+            ],
+            'description' => ['required', 'string', 'max:500'],
+            'amount'      => ['required', 'numeric', 'min:1'],
+            'proof'       => $proofRule,
+        ];
+    }
+
+    public function messages(): array
+    {
+        /** @var \App\Models\Disbursement $disbursement */
+        $disbursement = $this->route('disbursement');
+        $deadline = $disbursement->end_date
+            ->copy()
+            ->addDays(Setting::extraTransactionDays())
+            ->format('d/m/Y');
+
+        return [
+            'transaction_date.after_or_equal'  => 'Tanggal transaksi tidak boleh sebelum periode kegiatan.',
+            'transaction_date.before_or_equal'  => "Tanggal transaksi tidak boleh melebihi batas pelaporan ({$deadline}).",
+            'proof.mimes' => 'Bukti transaksi harus berformat JPG, JPEG, PNG, atau PDF.',
+            'proof.max'   => 'Ukuran file bukti transaksi maksimal 5MB.',
+        ];
+    }
+}
+
+ini file Models/Transaction.php yang aktif saat ini
+<?php
+
+namespace App\Models;
+
+use App\Enums\TransactionType;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class Transaction extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'disbursement_id', 'created_by', 'type',
+        'transaction_date', 'description', 'amount',
+        'proof_path', 'proof_original_name',
+    ];
+
+    protected $casts = [
+        'type'             => TransactionType::class,
+        'transaction_date' => 'date',
+        'amount'           => 'decimal:2',
+    ];
+
+    /* ── Relations ────────────────────────────────────── */
+    public function disbursement(): BelongsTo
+    {
+        return $this->belongsTo(Disbursement::class, 'disbursement_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /* ── Helpers ──────────────────────────────────────── */
+    public function hasProof(): bool
+    {
+        return ! is_null($this->proof_path);
+    }
+
+    public function getSignedAmountAttribute(): float
+    {
+        return $this->type === TransactionType::Expense
+            ? -(float) $this->amount
+            : (float) $this->amount;
+    }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return $this->withTrashed()
+            ->where($field ?? $this->getRouteKeyName(), $value)
+            ->firstOrFail();
+    }
+}
+
+ini file Models/Disbursement.php yang aktif saat ini
+<?php
+
+namespace App\Models;
+
+use App\Enums\DisbursementPurpose;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Proposal;
+
+class Disbursement extends Model
+{
+    use SoftDeletes;
+
+    protected $fillable = [
+        'purpose', 'name', 'start_date', 'end_date', 'pic_id',
+        'chairperson', 'budget_allocation_id', 'amount',
+        'auto_generate', 'parent_disbursement_id', 'created_by',
+    ];
+
+    protected $casts = [
+        'purpose'       => DisbursementPurpose::class,
+        'start_date'    => 'date',
+        'end_date'      => 'date',
+        'amount'        => 'decimal:2',
+        'auto_generate' => 'boolean',
+    ];
+
+    /* ── Relations ────────────────────────────────────── */
+
+    public function pic(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'pic_id');
+    }
+
+    public function budgetAllocation(): BelongsTo
+    {
+        return $this->belongsTo(BudgetAllocation::class, 'budget_allocation_id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function transactions(): HasMany
+    {
+        return $this->hasMany(Transaction::class, 'disbursement_id');
+    }
+
+    public function parentDisbursement(): BelongsTo
+    {
+        return $this->belongsTo(Disbursement::class, 'parent_disbursement_id');
+    }
+    
+    public function proposal(): BelongsTo
+    {
+        return $this->belongsTo(Proposal::class, 'proposal_id');
+    }
+
+    /* ── 4-Phase Status Lifecycle ─────────────────────────
+     *
+     *  NEW BUSINESS RULES (from task spec):
+     *
+     *  Phase 1 — Akan Datang     : today < start_date
+     *            Transactions ALLOWED (PIC can pre-register expenses)
+     *
+     *  Phase 2 — Aktif           : start_date ≤ today ≤ end_date
+     *            Transactions ALLOWED
+     *
+     *  Phase 3 — Periode Pelaporan (grace)
+     *            end_date < today ≤ end_date + extra_transaction_days
+     *            Transactions ALLOWED — time to finalise the report
+     *
+     *  Phase 4 — Selesai         : today > end_date + extra_transaction_days
+     *            Transactions DISABLED — period fully closed
+     *
+     *  allowsTransactions() is the SINGLE SOURCE OF TRUTH used by:
+     *    • EnsureActivityActive middleware
+     *    • TransactionPolicy::create / update / delete
+     *    • Pic\TransactionController (all write actions)
+     *    • Pic\DisbursementController (is_active prop to Vue)
+     *    • TransactionRequest (date validation upper-bound)
+     *
+     * ─────────────────────────────────────────────────── */
+
+    /** Phase 1 */
+    public function isUpcoming(): bool
+    {
+        return now()->toDateString() < $this->start_date->toDateString();
+    }
+
+    /** Phase 2 */
+    public function isActive(): bool
+    {
+        $today = now()->toDateString();
+        return $today >= $this->start_date->toDateString()
+            && $today <= $this->end_date->toDateString();
+    }
+
+    /** Phase 3 — grace period after end_date */
+    public function isInGracePeriod(): bool
+    {
+        $today = now()->toDateString();
+
+        if ($today <= $this->end_date->toDateString()) {
+            return false; // still active, not in grace
+        }
+
+        $extra = Setting::extraTransactionDays();
+        if ($extra <= 0) {
+            return false; // no grace period configured
+        }
+
+        return $today <= $this->end_date->copy()->addDays($extra)->toDateString();
+    }
+
+    /** Phase 4 — fully closed; all three earlier phases have passed */
+    public function isFullyExpired(): bool
+    {
+        return ! $this->isUpcoming()
+            && ! $this->isActive()
+            && ! $this->isInGracePeriod();
+    }
+
+    /**
+     * The single authoritative gate:
+     * TRUE  → Phases 1, 2, 3  (transactions allowed)
+     * FALSE → Phase 4 only    (Selesai)
+     *
+     * Every controller / middleware / policy delegates here.
+     * No other code should repeat this logic.
+     */
+    public function allowsTransactions(): bool
+    {
+        return ! $this->isFullyExpired();
+    }
+
+    /* ── Status Accessors ─────────────────────────────── */
+
+    public function getStatusAttribute(): string
+    {
+        if ($this->isUpcoming())      return 'upcoming';
+        if ($this->isActive())        return 'active';
+        if ($this->isInGracePeriod()) return 'grace';
+        return 'expired';
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return match ($this->status) {
+            'upcoming' => 'Akan Datang',
+            'active'   => 'Aktif',
+            'grace'    => 'Periode Pelaporan',
+            'expired'  => 'Selesai',
+            default    => '-',
+        };
+    }
+
+    /**
+     * Days remaining in the active phase (0 outside that phase).
+     */
+    public function getDaysRemainingAttribute(): int
+    {
+        $today = now()->startOfDay();
+
+        // Phase 1 — Akan Datang
+        if ($this->isUpcoming()) {
+            return max(0, $today->diffInDays($this->start_date));
+        }
+
+        // Phase 2 — Aktif
+        if ($this->isActive()) {
+            return max(0, $today->diffInDays($this->end_date));
+        }
+
+        // Phase 3 — Periode Pelaporan (grace)
+        if ($this->isInGracePeriod()) {
+            $deadline = $this->end_date
+                ->copy()
+                ->addDays(Setting::extraTransactionDays());
+
+            return max(0, $today->diffInDays($deadline));
+        }
+
+        // Phase 4 — Selesai
+        return 0;
+    }
+
+    /**
+     * The last calendar date on which a transaction may be submitted.
+     * = end_date + extra_transaction_days
+     *
+     * Used by TransactionRequest and by the Create/Edit Vue forms (:max on date input).
+     */
+    public function getTransactionDeadlineAttribute(): string
+    {
+        return $this->end_date
+            ->copy()
+            ->addDays(Setting::extraTransactionDays())
+            ->toDateString();
+    }
+
+    /* ── Computed Financials ──────────────────────────── */
+
+    public function getTotalExpenseAttribute(): float
+    {
+        return (float) $this->transactions()->where('type', 'expense')->sum('amount');
+    }
+
+    public function getTotalIncomeAttribute(): float
+    {
+        return (float) $this->transactions()->where('type', 'income')->sum('amount');
+    }
+
+    public function getRemainingFundsAttribute(): float
+    {
+        return (float) $this->amount + $this->total_income - $this->total_expense;
+    }
+
+    public function getRealizationPercentageAttribute(): float
+    {
+        if ((float) $this->amount === 0.0) return 0.0;
+        return round(($this->total_expense / (float) $this->amount) * 100, 2);
+    }
+
+    public function getTransactionCountAttribute(): int
+    {
+        return $this->transactions()->count();
+    }
+}
+
+pada file Pic/Transactions/Create.vue ada kode seperti ini:
+
+<!-- Phase 1 (Akan Datang) banner -->
+      <div v-if="disbursement.status === 'upcoming'"
+           class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center space-x-2 text-sm text-blue-700">
+        <svg class="w-4 h-4 shrink-0 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+            clip-rule="evenodd"/>
+        </svg>
+        <span>
+          Periode masih belum dimulai, namun saat ini anda dapat melakukan transaksi.
+          Rentang transaksi mulai pencairan anggaran - akhir periode pelaporan ({{ formatDate(disbursement.transaction_start_date) }} – {{ formatDate(disbursement.transaction_deadline) }})
+        </span>
+      </div>
+
+      <!-- Phase 3 (Periode Pelaporan) banner -->
+      <div v-if="disbursement.status === 'grace'"
+           class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center space-x-2 text-sm text-amber-800">
+        <svg class="w-4 h-4 shrink-0 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd"
+            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+            clip-rule="evenodd"/>
+        </svg>
+        <span>
+          Kegiatan sudah masuk periode pelaporan. Transaksi masih bisa ditambahkan hingga tanggal
+          <strong>{{ formatDate(disbursement.transaction_deadline) }} (transaksi disable jika melebihi tanggal tersebut)</strong>.
+        </span>
+      </div>
+
+saya ingin anda tambahkan juga untuk kondisi ketika disbursement.status active dan expired beserta svg dan warnanya

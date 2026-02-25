@@ -20,12 +20,31 @@ class DisbursementController extends Controller
 {
     public function index(Request $request): Response
     {
-        $disbursements = Disbursement::with(['pic:id,name', 'budgetAllocation:id,name'])
-            ->withoutTrashed()
-            ->when($request->search, fn ($q, $s) =>
-                $q->where('name', 'like', "%{$s}%")
-            )
-            ->when($request->type, fn ($q, $t) => $q->where('purpose', $t))
+        $query = Disbursement::with(['pic:id,name', 'budgetAllocation:id,name'])
+            ->withoutTrashed();
+        // 🔍 SEARCH
+        if ($request->filled('search')) {
+            $query->where('name', 'like', '%' . $request->search . '%');
+        }
+        // 🎯 PURPOSE FILTER
+        if ($request->filled('purpose')) {
+            $query->where('purpose', $request->purpose);
+        }
+        // ⏳ STATUS FILTER (COMPUTED → DATE-BASED)
+        if ($request->filled('status')) {
+            $today = now()->toDateString();
+
+            match ($request->status) {
+                'active'   => $query->where('start_date', '<=', $today)
+                                    ->where('end_date', '>=', $today),
+                'expired'  => $query->where('end_date', '<', $today),
+                'upcoming' => $query->where('start_date', '>', $today),
+
+                default    => null,
+            };
+        }
+
+        $disbursements = $query
             ->latest()
             ->paginate(15)
             ->withQueryString()
@@ -33,10 +52,10 @@ class DisbursementController extends Controller
 
         return Inertia::render('Admin/Disbursements/Index', [
             'disbursements' => $disbursements,
-            'filters'       => $request->only('search', 'type'),
+            'filters' => $request->only(['search', 'purpose', 'status']),
         ]);
     }
-
+    
     public function create(): Response
     {
         return Inertia::render('Admin/Disbursements/Create', [
@@ -191,11 +210,11 @@ class DisbursementController extends Controller
             'name'            => $d->name,
             'purpose'         => $d->purpose->label(),
             'purpose_value'   => $d->purpose->value,
-            'pic_name'        => $d->pic_name,
-            'allocation_name' => $d->allocation_name,
+            'pic_name'        => $d->pic?->name,
+            'allocation_name' => $d->budgetAllocation?->name,
             'amount'          => (float) $d->amount,
             'remaining_funds' => $d->remaining_funds,
-            'realization_pct' => $d->realization_percentage,
+            'realization_pct' => (float) $d->realization_percentage,
             'status'          => $d->status,
             'status_label'    => $d->status_label,
             'start_date'      => $d->start_date->format('d/m/Y'),

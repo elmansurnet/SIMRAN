@@ -63,13 +63,13 @@ class Disbursement extends Model
      *
      *  NEW BUSINESS RULES (from task spec):
      *
-     *  Phase 1 — Akan Datang     : today < start_date
+     *  Phase 1 — Persiapan     : today < start_date
      *            Transactions ALLOWED (PIC can pre-register expenses)
      *
      *  Phase 2 — Aktif           : start_date ≤ today ≤ end_date
      *            Transactions ALLOWED
      *
-     *  Phase 3 — Periode Pelaporan (grace)
+     *  Phase 3 — Pelaporan (grace)
      *            end_date < today ≤ end_date + extra_transaction_days
      *            Transactions ALLOWED — time to finalise the report
      *
@@ -150,9 +150,9 @@ class Disbursement extends Model
     public function getStatusLabelAttribute(): string
     {
         return match ($this->status) {
-            'upcoming' => 'Akan Datang',
+            'upcoming' => 'Persiapan',
             'active'   => 'Aktif',
-            'grace'    => 'Periode Pelaporan',
+            'grace'    => 'Pelaporan',
             'expired'  => 'Selesai',
             default    => '-',
         };
@@ -163,8 +163,41 @@ class Disbursement extends Model
      */
     public function getDaysRemainingAttribute(): int
     {
-        if (! $this->isActive()) return 0;
-        return max(0, (int) now()->diffInDays($this->end_date, false));
+        $today = now()->startOfDay();
+
+        // Phase 1 — Persiapan
+        if ($this->isUpcoming()) {
+            return max(0, $today->diffInDays($this->start_date));
+        }
+
+        // Phase 2 — Aktif
+        if ($this->isActive()) {
+            return max(0, $today->diffInDays($this->end_date));
+        }
+
+        // Phase 3 — Pelaporan (grace)
+        if ($this->isInGracePeriod()) {
+            $deadline = $this->end_date
+                ->copy()
+                ->addDays(Setting::extraTransactionDays());
+
+            return max(0, $today->diffInDays($deadline));
+        }
+
+        // Phase 4 — Selesai
+        return 0;
+    }
+
+    /**
+     * Earliest allowed transaction date.
+     * - Allows real transactions during upcoming phase
+     * - Prevents arbitrary backdating
+     */
+    public function getTransactionStartDateAttribute(): string
+    {
+        // Paling aman & audit-friendly:
+        // transaksi tidak boleh sebelum pencairan dibuat
+        return $this->created_at->toDateString();
     }
 
     /**

@@ -32,9 +32,9 @@
         <SearchInput v-model="searchQuery" placeholder="Cari nama kegiatan..." class="flex-1" />
         <select v-model="statusFilter" class="form-input sm:w-44">
           <option value="">Semua Status</option>
+          <option value="upcoming">Persiapan</option>
           <option value="active">Aktif</option>
-          <option value="expired">Selesai</option>
-          <option value="upcoming">Akan Datang</option>
+          <option value="expired">Pelaporan dan Selesai</option>
         </select>
         <button @click="applyFilter" class="btn-primary">Cari</button>
         <button v-if="hasFilter" @click="clearFilter" class="btn-secondary">Reset</button>
@@ -55,8 +55,8 @@
           <div class="flex-1 min-w-0 pr-2">
             <div class="flex items-center space-x-2 mb-1">
               <Badge :color="d.purpose_value === 'activity' ? 'blue' : 'teal'" class="text-xs">{{ d.purpose }}</Badge>
-              <Badge :color="d.status === 'active' ? 'green' : d.status === 'expired' ? 'gray' : 'blue'" :dot="true">
-                {{ d.status_label }}
+              <Badge :color="{active:'green', upcoming:'blue', grace:'amber', expired:'red',}[d.status]":dot="true">
+                  {{ d.status_label }}
               </Badge>
             </div>
             <h3 class="font-semibold text-gray-800 truncate group-hover:text-green-700 transition-colors">{{ d.name }}</h3>

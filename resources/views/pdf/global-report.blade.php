@@ -55,6 +55,8 @@
   .badge-green { background: #dcfce7; color: #166534; }
   .badge-gray  { background: #f3f4f6; color: #374151; }
   .badge-blue  { background: #dbeafe; color: #1d4ed8; }
+  .badge-amber { background: #fef3c7; color: #92400e; }
+  .badge-red   { background: #fee2e2; color: #991b1b; }
 
   /* Footer */
   .footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e5e7eb; display: flex; justify-content: space-between; font-size: 7pt; color: #9ca3af; }
@@ -183,10 +185,11 @@
         <th style="width:3%">No</th>
         <th style="width:22%">Nama Kegiatan</th>
         <th style="width:12%">PIC</th>
-        <th style="width:7%">Tujuan</th>
-        <th style="width:14%">Periode</th>
-        <th style="width:13%;text-align:right">Dana</th>
-        <th style="width:13%;text-align:right">Realisasi</th>
+        <th style="width:12%">Alokasi</th>
+        <th style="width:5%">Tujuan</th>
+        <th style="width:8%">Periode</th>
+        <th style="width:11%;text-align:right">Dana</th>
+        <th style="width:11%;text-align:right">Realisasi</th>
         <th style="width:9%">Progres</th>
         <th style="width:7%">Status</th>
       </tr>
@@ -198,6 +201,7 @@
         <td>{{ $i + 1 }}</td>
         <td style="font-weight:600;">{{ Str::limit($d->name, 40) }}</td>
         <td>{{ $d->pic->name ?? '-' }}</td>
+        <td>{{ $d->budgetAllocation?->name ?? '-' }}</td>
         <td>{{ $d->purpose->label() }}</td>
         <td style="font-size:7pt;">{{ $d->start_date->format('d/m/Y') }}<br>{{ $d->end_date->format('d/m/Y') }}</td>
         <td class="text-right">Rp {{ number_format($d->amount, 0, ',', '.') }}</td>
@@ -211,7 +215,18 @@
           </div>
         </td>
         <td>
-          <span class="badge {{ $d->isActive() ? 'badge-green' : ($d->isFullyExpired() ? 'badge-gray' : 'badge-blue') }}">
+          @php
+            if ($d->isActive()) {
+                $badge = 'badge-green';
+            } elseif ($d->isInGracePeriod()) {
+                $badge = 'badge-amber';
+            } elseif ($d->isFullyExpired()) {
+                $badge = 'badge-red';
+            } else {
+                $badge = 'badge-blue';
+            }
+          @endphp
+          <span class="badge {{ $badge }}">
             {{ $d->status_label }}
           </span>
         </td>

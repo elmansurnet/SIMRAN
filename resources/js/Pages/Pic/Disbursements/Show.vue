@@ -63,7 +63,7 @@
     </div>
 
     <!-- Phase-specific banners -->
-    <!-- Phase 1: Akan Datang — transactions allowed but period hasn't started -->
+    <!-- Phase 1: Persiapan — transactions allowed but period hasn't started -->
     <div v-if="disbursement.status === 'upcoming'"
          class="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-xl flex items-center space-x-3 animate-slide-down">
       <svg class="w-5 h-5 text-blue-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -72,12 +72,12 @@
           clip-rule="evenodd"/>
       </svg>
       <p class="text-sm text-blue-700">
-        Periode kegiatan belum dimulai (<strong>{{ disbursement.start_date }}</strong>).
-        Anda sudah bisa memasukkan transaksi dengan tanggal mulai dari periode tersebut.
+        Kegiatan dalam tahap persiapan. Kegiatan dimulai pada (<strong>{{ disbursement.start_date }}</strong>).
+        Anda sudah bisa memasukkan transaksi saat ini.
       </p>
     </div>
 
-    <!-- Phase 3: Periode Pelaporan (grace) — still allowed -->
+    <!-- Phase 3: Pelaporan (grace) — still allowed -->
     <div v-if="disbursement.status === 'grace'"
          class="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-start space-x-3 animate-slide-down">
       <svg class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -86,9 +86,9 @@
           clip-rule="evenodd"/>
       </svg>
       <div>
-        <p class="text-sm font-bold text-amber-800">Periode Pelaporan</p>
+        <p class="text-sm font-bold text-amber-800">Pelaporan</p>
         <p class="text-xs text-amber-700 mt-0.5">
-          Kegiatan telah selesai namun masih dalam masa pelaporan.
+          Kegiatan telah selesai namun masih dalam tahap pelaporan.
           Anda masih bisa menambah, mengedit, dan menghapus transaksi.
         </p>
       </div>
@@ -226,7 +226,7 @@
                   and Auditor can also open it. The policy enforces authorization.
                 -->
                 <a v-if="t.has_proof"
-                   :href="t.proof_url"
+                   :href="route('transactions.proof.auth', t.id)"
                    target="_blank"
                    class="inline-flex items-center space-x-1 text-blue-600 hover:text-blue-800 text-xs font-medium transition">
                   <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

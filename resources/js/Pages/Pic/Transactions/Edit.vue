@@ -12,6 +12,28 @@
         <span class="text-gray-800 font-medium">Edit Transaksi</span>
       </nav>
 
+      <!-- Phase 1 notice -->
+      <div v-if="disbursement.status === 'upcoming'"
+           class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center space-x-2 text-sm text-blue-800">
+        <svg class="w-4 h-4 shrink-0 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
+            clip-rule="evenodd"/>
+        </svg>
+        <span>Kegiatan belum dimulai. Transaksi yang sudah dibuat masih bisa diedit.</span>
+      </div>
+      
+      <!-- Phase 2 notice -->
+      <div v-if="disbursement.status === 'active'"
+          class="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center space-x-2 text-sm text-green-800">
+        <svg class="w-4 h-4 shrink-0 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 10.172 7.707 8.879a1 1 0 10-1.414 1.414L9 13l4.707-4.707z"
+            clip-rule="evenodd"/>
+        </svg>
+        <span>Kegiatan sudah dimulai. Transaksi yang sudah dibuat masih bisa diedit.</span>
+      </div>
+
       <!-- Phase 3 notice -->
       <div v-if="disbursement.status === 'grace'"
            class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center space-x-2 text-sm text-amber-800">
@@ -20,7 +42,7 @@
             d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
             clip-rule="evenodd"/>
         </svg>
-        <span>Periode pelaporan — transaksi masih bisa diedit.</span>
+        <span>Kegiatan masuk tahap pelaporan. Segera perbaiki transaksi sebelum transaksi ditutup total.</span>
       </div>
 
       <div class="card p-6 sm:p-8 animate-fade-in-up">
@@ -45,12 +67,12 @@
 
           <FormField label="Tanggal Transaksi" :error="form.errors.transaction_date" required>
             <!--
-              :min = start_date  (can't go before the period)
+              :min = start_date  (can choose a date between disbursement created and transaction_deadline)
               :max = transaction_deadline = end_date + extra_transaction_days
                      Allows Phase 3 dates; validated identically on the server.
             -->
             <input v-model="form.transaction_date" type="date" class="form-input"
-                   :min="disbursement.start_date"
+                   :min="disbursement.transaction_start_date"
                    :max="disbursement.transaction_deadline" />
           </FormField>
 
@@ -115,8 +137,9 @@ const selectedFile = ref(null)
 
 // Pre-populate from existing transaction data sent by the controller
 const form = useForm({
+  _method: 'PUT',
   type:             props.transaction.type,             // 'expense' | 'income'
-  transaction_date: props.transaction.transaction_date, // 'Y-m-d' (transaction_date_raw from backend)
+  transaction_date: props.transaction.transaction_date_raw, // 'Y-m-d' (transaction_date_raw from backend)
   description:      props.transaction.description,
   amount:           props.transaction.amount,
   proof:            null,  // null = keep existing proof; file = replace it
@@ -129,12 +152,22 @@ function handleFile(e) {
     form.proof = file
   }
 }
-
+console.log('FORM BEFORE SUBMIT', {
+  type: form.type,
+  transaction_date: form.transaction_date,
+  description: form.description,
+  amount: form.amount,
+  proof: form.proof,
+})
 function submit() {
-  // PUT to: pic.disbursements.transactions.update  →  /pic/disbursements/{id}/transactions/{tx}/
-  form.put(
-    route('pic.disbursements.transactions.update', [props.disbursement.id, props.transaction.id]),
-    { forceFormData: true }
+  form.post(
+    route('pic.disbursements.transactions.update', [
+      props.disbursement.id,
+      props.transaction.id
+    ]),
+    {
+      forceFormData: true
+    }
   )
 }
 </script>

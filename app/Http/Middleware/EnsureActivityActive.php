@@ -15,7 +15,7 @@ class EnsureActivityActive
      * Delegates entirely to Disbursement::allowsTransactions() so the
      * phase logic lives in exactly ONE place (the model).
      *
-     * Allowed:  Phase 1 (Akan Datang), Phase 2 (Aktif), Phase 3 (Periode Pelaporan)
+     * Allowed:  Phase 1 (Persiapan), Phase 2 (Aktif), Phase 3 (Pelaporan)
      * Blocked:  Phase 4 (Selesai) only
      */
     public function handle(Request $request, Closure $next): Response

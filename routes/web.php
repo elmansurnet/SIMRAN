@@ -48,8 +48,8 @@ Route::middleware('auth')->group(function () {
         |
         ─────────────────────────────────────────────────────────── */
 
-        // Route::get('transactions/{transaction}/proof', [Pic\TransactionController::class, 'downloadProofAuth'])
-        // ->name('transactions.proof.auth');
+        Route::get('transactions/{transaction}/proof', [Pic\TransactionController::class, 'downloadProof'])
+        ->name('transactions.proof.auth');
 
         // // Individual proof file — serves inline; opened via click or QR scan
         // Route::get(

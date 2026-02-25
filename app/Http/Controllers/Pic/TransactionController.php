@@ -34,15 +34,16 @@ class TransactionController extends Controller
 
         return Inertia::render('Pic/Transactions/Create', [
             'disbursement' => [
-                'id'                   => $disbursement->id,
-                'name'                 => $disbursement->name,
-                'start_date'           => $disbursement->start_date->format('Y-m-d'),
-                'end_date'             => $disbursement->end_date->format('Y-m-d'),
-                'transaction_deadline' => $disbursement->transaction_deadline, // Y-m-d :max for date input
-                'remaining_funds'      => $disbursement->remaining_funds,
-                'amount'               => (float) $disbursement->amount,
-                'status'               => $disbursement->status,
-                'status_label'         => $disbursement->status_label,
+                'id'                    => $disbursement->id,
+                'name'                  => $disbursement->name,
+                'start_date'            => $disbursement->start_date->format('Y-m-d'),
+                'end_date'              => $disbursement->end_date->format('Y-m-d'),
+                'transaction_start_date'=> $disbursement->transaction_start_date,
+                'transaction_deadline'  => $disbursement->transaction_deadline, // Y-m-d :max for date input
+                'remaining_funds'       => $disbursement->remaining_funds,
+                'amount'                => (float) $disbursement->amount,
+                'status'                => $disbursement->status,
+                'status_label'          => $disbursement->status_label,
             ],
         ]);
     }
@@ -80,21 +81,22 @@ class TransactionController extends Controller
 
         return Inertia::render('Pic/Transactions/Edit', [
             'disbursement' => [
-                'id'                   => $disbursement->id,
-                'name'                 => $disbursement->name,
-                'start_date'           => $disbursement->start_date->format('Y-m-d'),
-                'end_date'             => $disbursement->end_date->format('Y-m-d'),
-                'transaction_deadline' => $disbursement->transaction_deadline,
-                'status'               => $disbursement->status,
-                'status_label'         => $disbursement->status_label,
+                'id'                    => $disbursement->id,
+                'name'                  => $disbursement->name,
+                'start_date'            => $disbursement->start_date->format('Y-m-d'),
+                'end_date'              => $disbursement->end_date->format('Y-m-d'),
+                'transaction_start_date'=> $disbursement->transaction_start_date,
+                'transaction_deadline'  => $disbursement->transaction_deadline,
+                'status'                => $disbursement->status,
+                'status_label'          => $disbursement->status_label,
             ],
             'transaction' => [
-                'id'               => $transaction->id,
-                'type'             => $transaction->type->value,
-                'transaction_date' => $transaction->transaction_date->format('Y-m-d'),
-                'description'      => $transaction->description,
-                'amount'           => (float) $transaction->amount,
-                'proof_name'       => $transaction->proof_original_name,
+                'id'                    => $transaction->id,
+                'type'                  => $transaction->type->value,
+                'transaction_date_raw'  => $transaction->transaction_date->format('Y-m-d'),
+                'description'           => $transaction->description,
+                'amount'                => (float) $transaction->amount,
+                'proof_name'            => $transaction->proof_original_name,
             ],
         ]);
     }
@@ -108,7 +110,7 @@ class TransactionController extends Controller
         abort_unless($transaction->disbursement_id === $disbursement->id, 403);
         abort_unless($transaction->created_by === $user->id, 403, 'Hanya bisa mengedit transaksi milik Anda.');
         abort_unless($disbursement->allowsTransactions(), 403, 'Periode pencairan telah berakhir.');
-
+        
         $this->service->update($transaction, $request->validated(), $request->file('proof'));
 
         return redirect()->route('pic.disbursements.show', $disbursement)
@@ -128,7 +130,7 @@ class TransactionController extends Controller
         abort_unless(
             $disbursement->allowsTransactions(),
             403,
-            'Transaksi tidak bisa dihapus setelah periode pelaporan berakhir.'
+            'Transaksi tidak bisa dihapus setelah tahap pelaporan berakhir.'
         );
 
         $this->service->delete($transaction);
@@ -147,7 +149,7 @@ class TransactionController extends Controller
         abort_unless(
             $disbursement->allowsTransactions(),
             403,
-            'Transaksi tidak bisa dihapus setelah periode pelaporan berakhir.'
+            'Transaksi tidak bisa dihapus setelah tahap pelaporan berakhir.'
         );
 
         $validated = $request->validate([
@@ -180,24 +182,33 @@ class TransactionController extends Controller
     /* ── PROOF DOWNLOAD ──────────────────────────────── */
 
     /**
-     * Serve proof files inline (for browser view and QR code scan).
+     * Serve proof files inline (for browser view and QR code scan) with facades storage.
      */
     public function downloadProof(Request $request, Transaction $transaction)
     {
-        if (! $request->hasValidSignature()) {
-            abort(403, 'Link bukti tidak valid atau telah kedaluwarsa.');
+        // 🔐 INTERNAL ACCESS (auth user)
+        if ($request->user()) {
+            abort_unless(
+                $request->user()->isSuperadmin()
+                || $request->user()->isAuditor()
+                || $request->user()->id === $transaction->created_by,
+                403
+            );
+        }
+        // 🌍 PUBLIC ACCESS (QR code)
+        else {
+            abort_unless($request->hasValidSignature(), 403);
         }
 
-        abort_unless($transaction->hasProof(), 404, 'Bukti tidak tersedia.');
+        abort_unless($transaction->hasProof(), 404);
+        abort_unless(Storage::exists($transaction->proof_path), 404);
 
-        // 🔑 GUNAKAN STORAGE (SAMA SEPERTI ZIP)
-        abort_unless(Storage::exists($transaction->proof_path), 404, 'File tidak ditemukan.');
-
-        $path = Storage::path($transaction->proof_path);
-
-        return response()->file($path, [
-            'Content-Type'        => mime_content_type($path) ?: 'application/octet-stream',
-            'Content-Disposition' => 'inline; filename="'.$transaction->proof_original_name.'"',
-        ]);
+        return response()->file(
+            Storage::path($transaction->proof_path),
+            [
+                'Content-Type'        => mime_content_type(Storage::path($transaction->proof_path)),
+                'Content-Disposition' => 'inline; filename="'.$transaction->proof_original_name.'"',
+            ]
+        );
     }
 }

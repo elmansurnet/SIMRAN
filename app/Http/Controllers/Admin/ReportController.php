@@ -37,9 +37,12 @@ class ReportController extends Controller
             ->map(fn ($d) => [
                 'name'            => $d->name,
                 'pic_name'        => $d->pic->name,
+                'allocation_name' => $d->budgetAllocation?->name,
                 'amount'          => (float) $d->amount,
                 'total_expense'   => $d->total_expense,
                 'realization_pct' => $d->realization_percentage,
+                'start_date'      => $d->start_date->format('d/m/Y'),
+                'end_date'        => $d->end_date->format('d/m/Y'),
                 'status'          => $d->status,
                 'status_label'    => $d->status_label,
             ])

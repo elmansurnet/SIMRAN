@@ -14,7 +14,7 @@
         <span class="text-gray-800 font-medium">Tambah Transaksi</span>
       </nav>
 
-      <!-- Phase 1 (Akan Datang) banner -->
+      <!-- Phase 1 (Persiapan) banner -->
       <div v-if="disbursement.status === 'upcoming'"
            class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center space-x-2 text-sm text-blue-700">
         <svg class="w-4 h-4 shrink-0 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
@@ -22,7 +22,25 @@
             d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
             clip-rule="evenodd"/>
         </svg>
-        <span>Periode belum dimulai — tanggal transaksi harus mulai dari <strong>{{ formatDate(disbursement.start_date) }}</strong>.</span>
+        <span>
+          Periode masih belum dimulai, namun saat ini anda dapat melakukan transaksi.
+          Rentang transaksi mulai pencairan anggaran - akhir tahap pelaporan ({{ formatDate(disbursement.transaction_start_date) }} – {{ formatDate(disbursement.transaction_deadline) }})
+        </span>
+      </div>
+
+      <!-- Phase 2 (Aktif) banner -->
+      <div v-if="disbursement.status === 'active'"
+          class="mb-4 p-3 bg-green-50 border border-green-200 rounded-xl flex items-center space-x-2 text-sm text-green-800">
+        <svg class="w-4 h-4 shrink-0 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.707a1 1 0 00-1.414-1.414L9 10.172 7.707 8.879a1 1 0 10-1.414 1.414L9 13l4.707-4.707z"
+            clip-rule="evenodd"/>
+        </svg>
+        <span>
+          Kegiatan sedang berlangsung. Transaksi dapat dilakukan secara normal
+          selama periode kegiatan hingga
+          <strong>{{ formatDate(disbursement.transaction_deadline) }}</strong>.
+        </span>
       </div>
 
       <!-- Phase 3 (Periode Pelaporan) banner -->
@@ -34,10 +52,24 @@
             clip-rule="evenodd"/>
         </svg>
         <span>
-          Periode pelaporan — transaksi masih bisa ditambahkan hingga
-          <strong>{{ formatDate(disbursement.transaction_deadline) }}</strong>.
+          Kegiatan sudah masuk tahap pelaporan. Transaksi masih bisa ditambahkan hingga tanggal
+          <strong>{{ formatDate(disbursement.transaction_deadline) }} (transaksi disable jika melebihi tanggal tersebut)</strong>.
         </span>
       </div>
+
+      <!-- Phase 4 (Selesai / Expired) banner -->
+      <div v-if="disbursement.status === 'expired'"
+          class="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-center space-x-2 text-sm text-red-800">
+        <svg class="w-4 h-4 shrink-0 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm4-9a1 1 0 10-2 0 1 1 0 002 0zM9 7a1 1 0 112 0v4a1 1 0 11-2 0V7z"
+            clip-rule="evenodd"/>
+        </svg>
+        <span>
+          Periode kegiatan dan pelaporan telah berakhir.
+          <strong>Transaksi sudah ditutup sepenuhnya</strong> dan tidak dapat ditambahkan atau diubah.
+        </span>
+      </div> 
 
       <!-- Context card -->
       <div class="card p-4 mb-5 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200 animate-slide-down">
@@ -82,15 +114,15 @@
 
           <FormField label="Tanggal Transaksi" :error="form.errors.transaction_date" required>
             <!--
-              :min = start_date (even during Phase 1, user can't pick a date before period)
+              :min = start_date (even during Phase 1, user can pick a date between disburement created and period activity/operational)
               :max = transaction_deadline = end_date + extra_transaction_days
                      This allows Phase 3 dates while blocking Phase 4.
             -->
             <input v-model="form.transaction_date" type="date" class="form-input"
-                   :min="disbursement.start_date"
+                   :min="disbursement.transaction_start_date"
                    :max="disbursement.transaction_deadline" />
             <p class="text-xs text-gray-400 mt-1">
-              Rentang: {{ formatDate(disbursement.start_date) }} – {{ formatDate(disbursement.transaction_deadline) }}
+              Rentang: {{ formatDate(disbursement.transaction_start_date) }} – {{ formatDate(disbursement.transaction_deadline) }}
             </p>
           </FormField>
 

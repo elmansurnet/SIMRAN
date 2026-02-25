@@ -132,7 +132,7 @@ class DisbursementController extends Controller
                 'status'               => $disbursement->status,       // upcoming|active|grace|expired
                 'status_label'         => $disbursement->status_label,
                 'days_remaining'       => $disbursement->days_remaining,
-                // TRUE during Phase 1 (Akan Datang) + Phase 2 (Aktif) + Phase 3 (Pelaporan)
+                // TRUE during Phase 1 (Persiapan) + Phase 2 (Aktif) + Phase 3 (Pelaporan)
                 // FALSE only when Phase 4 (Selesai)
                 'is_active'            => $disbursement->allowsTransactions(),
                 'transactions'         => array_reverse($txList), // newest first for display

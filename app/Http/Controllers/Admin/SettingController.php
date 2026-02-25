@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
+use App\Enums\UserRole;
 use App\Models\Setting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,6 +20,8 @@ class SettingController extends Controller
                 'extra_transaction_days' => (int) Setting::get('extra_transaction_days', 0),
                 'app_name'               => Setting::get('app_name', 'SIMRAN UNISYA'),
             ],
+            'approvers' => User::where('role', UserRole::Approver)
+                ->get(['id', 'name', 'email']),
         ]);
     }
 

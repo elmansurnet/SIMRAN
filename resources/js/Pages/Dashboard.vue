@@ -159,9 +159,24 @@
         >
           <div class="flex justify-between items-start mb-2">
             <p class="text-sm font-semibold text-gray-800 truncate pr-2">{{ d.name }}</p>
-            <span class="shrink-0 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-              {{ d.days_remaining }} hari lagi
-            </span>
+              <span v-if="d.days_remaining >= 0" class="shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold"
+                :class="{
+                  'bg-blue-100 text-blue-700':  d.status === 'upcoming',
+                  'bg-green-100 text-green-700': d.status === 'active',
+                  'bg-amber-100 text-amber-700': d.status === 'grace'
+                }">
+                <template v-if="d.status === 'upcoming'">
+                  Mulai {{ d.days_remaining }} hari lagi
+                </template>
+
+                <template v-else-if="d.status === 'grace'">
+                  Batas laporan {{ d.days_remaining }} hari lagi
+                </template>
+
+                <template v-else>
+                  Sedang berlangsung
+                </template>
+              </span>
           </div>
           <ProgressBar :percentage="num(d.realization_pct)" size="sm" :show-label="false" class="mb-2" />
           <div class="flex justify-between text-xs text-gray-500">
@@ -523,4 +538,5 @@ onMounted(() => {
     })
   }
 })
+console.log('activeDisbursements:', activeDisbursements.value)
 </script>

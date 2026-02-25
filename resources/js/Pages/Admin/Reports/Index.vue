@@ -69,6 +69,7 @@
             <tr>
               <Th>Kegiatan</Th>
               <Th>PIC</Th>
+              <Th>Alokasi</Th>
               <Th>Status</Th>
               <Th class="text-right">Dana</Th>
               <Th class="text-right">Realisasi</Th>
@@ -80,11 +81,13 @@
                 :class="['hover:bg-green-50/40 transition-colors', i % 2 === 1 ? 'bg-green-50/20' : '']">
               <Td>
                 <p class="font-medium text-gray-800 truncate max-w-48">{{ d.name }}</p>
-                <p class="text-xs text-gray-400">{{ d.pic_name }}</p>
+                <p class="text-xs text-gray-400">{{ d.start_date }}</p>
+                <p class="text-xs text-gray-400">{{ d.end_date }}</p>
               </Td>
               <Td class="text-xs text-gray-500">{{ d.pic_name }}</Td>
+              <Td class="text-xs text-gray-500">{{ d.allocation_name }}</Td>
               <Td>
-                <Badge :color="d.status === 'active' ? 'green' : d.status === 'expired' ? 'gray' : 'blue'" :dot="true">
+                <Badge :color="{active:'green', upcoming:'blue', grace:'amber', expired:'red',}[d.status]":dot="true">
                   {{ d.status_label }}
                 </Badge>
               </Td>

@@ -20,7 +20,7 @@ class TransactionRequest extends FormRequest
 
         // Upper bound = end_date + grace days (the model accessor).
         // This is correct for both create AND update.
-        // During Phase 1 (Akan Datang) the lower bound still prevents dates before
+        // During Phase 1 (Persiapan) the lower bound still prevents dates before
         // start_date, but the transaction button is shown and the form is reachable.
         $maxDate = $disbursement->transaction_deadline;
 
@@ -33,7 +33,9 @@ class TransactionRequest extends FormRequest
             'transaction_date' => [
                 'required',
                 'date',
-                'after_or_equal:' . $disbursement->start_date->toDateString(),
+                // boleh transaksi dengan menggunakan tanggal realtime saat phase 1 (upcoming)
+                'after_or_equal:' . $disbursement->transaction_start_date,
+                // transaksi dikunci jika masuk transaction_deadline
                 'before_or_equal:' . $maxDate,
             ],
             'description' => ['required', 'string', 'max:500'],
@@ -52,7 +54,7 @@ class TransactionRequest extends FormRequest
             ->format('d/m/Y');
 
         return [
-            'transaction_date.after_or_equal'  => 'Tanggal transaksi tidak boleh sebelum periode kegiatan.',
+            'transaction_date.after_or_equal'  => 'Tanggal transaksi tidak boleh sebelum pencairan anggaran dibuat.',
             'transaction_date.before_or_equal'  => "Tanggal transaksi tidak boleh melebihi batas pelaporan ({$deadline}).",
             'proof.mimes' => 'Bukti transaksi harus berformat JPG, JPEG, PNG, atau PDF.',
             'proof.max'   => 'Ukuran file bukti transaksi maksimal 5MB.',

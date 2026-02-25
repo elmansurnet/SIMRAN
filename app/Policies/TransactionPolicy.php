@@ -14,7 +14,7 @@ class TransactionPolicy
      *   – the disbursement belongs to them
      *   – the disbursement is NOT in Phase 4 (allowsTransactions() is the gate)
      *
-     * Phase 1 (Akan Datang), Phase 2 (Aktif), Phase 3 (Periode Pelaporan) all allow.
+     * Phase 1 (Persiapan), Phase 2 (Aktif), Phase 3 (Pelaporan) all allow.
      */
     public function create(User $user, Disbursement $disbursement): bool
     {

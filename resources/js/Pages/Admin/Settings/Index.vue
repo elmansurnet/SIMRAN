@@ -14,7 +14,7 @@
           </div>
           <div>
             <h3 class="font-bold text-green-900">Pengaturan Umum</h3>
-            <p class="text-xs text-gray-400">Konfigurasi perilaku sistem</p>
+            <p class="text-xs text-gray-400">Konfigurasi aturan sistem</p>
           </div>
         </div>
 
@@ -26,7 +26,7 @@
           <FormField
             label="Hari Tambahan Input Transaksi (Periode Pelaporan)"
             :error="form.errors.extra_transaction_days"
-            hint="Jumlah hari setelah tanggal akhir kegiatan di mana PIC masih bisa menginput transaksi. Isi 0 untuk menonaktifkan periode pelaporan."
+            hint="Jumlah hari setelah tanggal akhir kegiatan di mana PIC masih bisa menginput transaksi. Isi 0 untuk menonaktifkan tahap pelaporan."
             required
           >
             <div class="flex items-center space-x-3">
@@ -43,10 +43,10 @@
             <p class="font-semibold">💡 Cara kerja hari tambahan:</p>
             <p>Misal kegiatan berakhir <strong>30 Jun</strong> dan hari tambahan = <strong>{{ form.extra_transaction_days || 0 }}</strong>:</p>
             <ul class="list-disc list-inside space-y-0.5 mt-1">
-              <li>Fase 1 (Akan Datang): PIC sudah bisa input rencana transaksi</li>
+              <li>Fase 1 (Persiapan): PIC sudah bisa input rencana transaksi</li>
               <li>Fase 2 (Aktif): transaksi berjalan normal</li>
               <li v-if="(form.extra_transaction_days || 0) > 0">
-                Fase 3 (Periode Pelaporan): masih bisa input s/d
+                Fase 3 (Pelaporan): masih bisa input s/d
                 <strong>{{ previewDeadline }}</strong>
               </li>
               <li>Fase 4 (Selesai): transaksi dikunci sepenuhnya</li>
@@ -101,7 +101,10 @@ import FormField from '@/Components/FormField.vue'
 
 const props = defineProps({
   settings:  Object,
-  approvers: Array,
+  approvers: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 const form = useForm({

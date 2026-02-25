@@ -132,7 +132,7 @@
                   Corrected to 'transactions.proof.download' (shared route, policy-authorised).
                 -->
                 <a v-if="t.has_proof"
-                   :href="route('transactions.proof.download', t.id)"
+                   :href="route('transactions.proof.auth', t.id)"
                    target="_blank"
                    class="inline-flex items-center space-x-1 text-blue-600 hover:text-blue-800 text-xs font-medium transition">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
