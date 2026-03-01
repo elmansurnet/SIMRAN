@@ -51,7 +51,7 @@ class ProposalSearchController extends Controller
             && $proposal->certificate_pdf_path
             && Storage::exists($proposal->certificate_pdf_path),
             404,
-            'Sertifikat belum tersedia.'
+            'Pengesahan belum tersedia.'
         );
 
         return response()->streamDownload(

@@ -152,13 +152,6 @@ function handleFile(e) {
     form.proof = file
   }
 }
-console.log('FORM BEFORE SUBMIT', {
-  type: form.type,
-  transaction_date: form.transaction_date,
-  description: form.description,
-  amount: form.amount,
-  proof: form.proof,
-})
 function submit() {
   form.post(
     route('pic.disbursements.transactions.update', [

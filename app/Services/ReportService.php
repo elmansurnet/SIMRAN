@@ -18,6 +18,19 @@ use ZipArchive;
 class ReportService
 {
     /**
+     * F4 / Folio paper size in dompdf points (1 inch = 72 pt).
+     *   width : 8.27 in × 72 = 595.44 pt
+     *   height: 12.99 in × 72 = 935.28 pt
+     *
+     * dompdf's setPaper() accepts a custom size as [x0, y0, x1, y1].
+     * Defined once here so all three report methods share the same value.
+     *
+     * CHANGE: added this constant. Previously each method passed a string
+     * ('A4') to setPaper(); now they all reference self::F4 instead.
+     */
+    private const F4 = [0, 0, 595.44, 935.28];
+
+    /**
      * Generate QR code PNG via Imagick extension.
      * Returns base64-encoded PNG string for embedding in PDF.
      *
@@ -73,7 +86,7 @@ class ReportService
         $pdf = Pdf::loadView(
             'pdf.pic-report',
             compact('disbursement', 'transactions', 'qrCodes', 'zipQr')
-        )->setPaper('A4', 'portrait');
+        )->setPaper(self::F4, 'portrait'); // CHANGE: 'A4' → self::F4
 
         return $pdf->output();
     }
@@ -100,7 +113,8 @@ class ReportService
             'allocations', 'disbursements',
             'totalBudget', 'totalDisbursed', 'totalExpense',
             'totalIncome', 'remainingBudget', 'currentCash'
-        ))->setPaper('A4', 'landscape');
+        ))->setPaper(self::F4, 'portrait'); // CHANGE: 'A4', 'landscape' → self::F4, 'portrait'
+                                            // The blade view has been redesigned for portrait layout.
 
         return $pdf->output();
     }
@@ -119,7 +133,7 @@ class ReportService
         $pdf = Pdf::loadView(
             'pdf.approval-certificate',
             compact('proposal', 'qrCode')
-        )->setPaper('A4', 'portrait');
+        )->setPaper(self::F4, 'portrait'); // CHANGE: 'A4' → self::F4
 
         return $pdf->output();
     }

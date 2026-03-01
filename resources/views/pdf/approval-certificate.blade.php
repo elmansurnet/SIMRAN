@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>Sertifikat Persetujuan – {{ $proposal->code }}</title>
+<title>Pengesahan Persetujuan – {{ $proposal->code }}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: 'DejaVu Sans', Arial, sans-serif; font-size: 10pt; color: #1a1a1a; }
@@ -87,7 +87,7 @@
       Periode: {{ $proposal->start_date->format('d/m/Y') }} – {{ $proposal->end_date->format('d/m/Y') }}
     </p>
     <p style="font-size:8pt;color:#16a34a;font-weight:600;margin-top:4px;">
-      ✓ Disetujui pada {{ $proposal->approved_at?->format('d F Y') }}
+      Disetujui pada: {{ $proposal->approved_at?->format('d/m/Y') }}
     </p>
   </div>
 

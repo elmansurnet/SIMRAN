@@ -52,7 +52,7 @@
              @click.stop
              class="w-full flex items-center justify-center space-x-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 border border-green-200 py-1.5 rounded-lg transition">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <span>Unduh Sertifikat</span>
+            <span>Unduh Pengesahan</span>
           </a>
         </div>
       </div>
