@@ -2,7 +2,7 @@
 <html lang="id">
 <head>
 <meta charset="UTF-8">
-<title>Sertifikat Persetujuan — {{ $proposal->code }}</title>
+<title>Pengesahan Persetujuan — {{ $proposal->code }}</title>
 <style>
 /* ═══════════════════════════════════════════════════════════════
    SIMRAN UNISYA — Unified PDF Design System v2
@@ -126,14 +126,14 @@ body  { font-family:'DejaVu Sans', Arial, sans-serif; font-size:9pt; color:#1a1a
       </td>
       <td style="white-space:nowrap; text-align:right;">
         <div class="hdr-stamp">
-          Sertifikat Persetujuan Anggaran<br>
+          Pengesahan Persetujuan Anggaran<br>
           Diterbitkan: {{ now()->format('d/m/Y H:i') }} WIB
         </div>
       </td>
     </tr>
   </table>
   <div class="hdr-div">
-    <div class="hdr-title">SERTIFIKAT PERSETUJUAN ANGGARAN</div>
+    <div class="hdr-title">PENGESAHAN PERSETUJUAN ANGGARAN</div>
     <div class="hdr-sub">{{ $proposal->code }}</div>
   </div>
 </div>
@@ -251,7 +251,7 @@ body  { font-family:'DejaVu Sans', Arial, sans-serif; font-size:9pt; color:#1a1a
 
 {{-- ══════════════════ NOTICE ══════════════════ --}}
 <div class="notice-box">
-  Dokumen ini merupakan sertifikat digital yang digenerate secara otomatis oleh sistem SIMRAN UNISYA.
+  Dokumen ini merupakan pengesahan digital yang digenerate secara otomatis oleh sistem SIMRAN UNISYA.
   Untuk memverifikasi keaslian dokumen ini, silakan scan QR Code yang tersedia atau hubungi
   pengelola sistem.
 </div>
@@ -263,7 +263,7 @@ body  { font-family:'DejaVu Sans', Arial, sans-serif; font-size:9pt; color:#1a1a
       <td class="ftr-l" style="vertical-align:bottom;">
         <strong>SIMRAN UNISYA</strong> — Universitas Islam Syarifuddin<br>
         Dokumen ini digenerate secara digital. QR Code dapat dipindai<br>
-        untuk memverifikasi keaslian sertifikat ini melalui sistem.<br>
+        untuk memverifikasi keaslian pengesahan ini melalui sistem.<br>
         <span style="display:block; margin-top:4px;">
           Diterbitkan: {{ now()->format('l, d F Y') }} pukul {{ now()->format('H:i') }} WIB
         </span>
