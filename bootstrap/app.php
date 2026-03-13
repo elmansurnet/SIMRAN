@@ -3,6 +3,9 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\Response;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -22,5 +25,31 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+         /*
+         * Intercept HTTP error responses and render them via Inertia so that
+         * the Vue Error.vue page is shown with the application's full theme.
+         *
+         * How this works:
+         *  - `respond` fires for every outgoing HTTP response before it is sent,
+         *    letting us transform it transparently.
+         *  - We skip pure JSON/API requests (Accept: application/json) so those
+         *    consumers still receive structured JSON error payloads.
+         *  - `Inertia::render('Error', [...])` detects the request type itself:
+         *    full page load → full HTML shell (app.blade.php + Vite assets);
+         *    Inertia XHR navigation → JSON component diff.
+         *  - `->setStatusCode()` preserves the correct HTTP status so that
+         *    browsers, crawlers, and monitoring tools see the right code.
+         */
+        $exceptions->respond(function (Response $response, Throwable $e, Request $request) {
+            $status       = $response->getStatusCode();
+            $handledCodes = [403, 404, 419, 429, 500, 503];
+
+            if (! $request->expectsJson() && in_array($status, $handledCodes)) {
+                return Inertia::render('Error', ['status' => $status])
+                    ->toResponse($request)
+                    ->setStatusCode($status);
+            }
+
+            return $response;
+        });
     })->create();
