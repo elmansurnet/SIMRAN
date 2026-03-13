@@ -125,7 +125,7 @@ body  { font-family:'DejaVu Sans', Arial, sans-serif; font-size:8.5pt; color:#1a
     <tr>
       <td>
         <div class="hdr-brand">SIMRAN UNISYA</div>
-        <div class="hdr-tag">Sistem Manajemen dan Realisasi Anggaran — Universitas Islam Syarifuddin</div>
+        <div class="hdr-tag">Sistem Integrasi Manajemen Keuangan dan Anggaran — Universitas Islam Syarifuddin</div>
       </td>
       <td style="white-space:nowrap; text-align:right;">
         <div class="hdr-stamp">

@@ -1,7 +1,7 @@
 @php
 $code        = 503;
 $title       = 'Layanan Sedang Dalam Pemeliharaan';
-$description = 'Sistem SIMRAN UNISYA sedang menjalani pemeliharaan terjadwal untuk meningkatkan performa dan keandalan. Kami akan segera kembali. Terima kasih atas kesabaran Anda.';
+$description = 'Aplikasi SIMRAN UNISYA sedang menjalani pemeliharaan terjadwal untuk meningkatkan performa dan keandalan. Kami akan segera kembali. Terima kasih atas kesabaran Anda.';
 $httpLabel   = 'Service Unavailable';
 $floatClass  = 'float';
 $reloadBtn   = true;

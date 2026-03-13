@@ -27,11 +27,11 @@
         </div>
 
         <h1 class="text-4xl font-black text-white leading-tight mb-4">
-          Sistem Manajemen<br/>dan Realisasi Anggaran
+          Sistem Integrasi <br/>Manajemen Keuangan dan Anggaran
           <span class="text-green-300">UNISYA</span>
         </h1>
         <p class="text-green-100 text-base leading-relaxed">
-          Platform terpadu untuk pengelolaan alokasi dan realisasi anggaran di Universitas Islam Syarifuddin.
+          Platform terpadu untuk manajemen keuangan di Universitas Islam Syarifuddin.
         </p>
       </div>
 
@@ -153,10 +153,10 @@ const form = useForm({
 })
 
 const features = [
-  { icon: '💰', text: 'Kelola alokasi anggaran dengan mudah' },
-  { icon: '📋', text: 'Pantau pencairan dan realisasi kegiatan' },
-  { icon: '📊', text: 'Laporan keuangan otomatis & terperinci' },
-  { icon: '🔒', text: 'Sistem peran: Admin, PIC, dan Auditor' },
+  { icon: '💰', text: 'Pengelolaan Alokasi Anggaran' },
+  { icon: '📋', text: 'Pemantauan Pencairan dan Realisasi Kegiatan' },
+  { icon: '📊', text: 'Pelaporan Keuangan Otomatis dan Terperinci' },
+  { icon: '🔒', text: 'Pembagian Peran Monitoring dan Evaluasi' },
 ]
 
 function submit() {
